@@ -3,141 +3,51 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>產品符號庫 · Product Token Library (Shared)</title>
+<title>產品符號庫 · Product Token Library</title>
 <style>
-  :root{--blue:#1F4E78;--red:#C00000;--bg:#f4f6fa;--card:#fff;--line:#e3e8f0;--txt:#1c2733;--muted:#6b7a8c;--green:#1e7e34}
+  :root{--blue:#1F4E78;--red:#C00000;--bg:#f4f6fa;--card:#fff;--line:#e3e8f0;--txt:#1c2733;--muted:#6b7a8c}
   *{box-sizing:border-box}
   body{margin:0;font-family:"Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif;background:var(--bg);color:var(--txt)}
-  /* ---- password gate ---- */
   #gate{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-  #gate .box{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:32px;width:100%;max-width:380px;box-shadow:0 4px 24px rgba(20,40,70,.08)}
+  #gate .box{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:32px;width:100%;max-width:400px;box-shadow:0 4px 24px rgba(20,40,70,.08)}
   #gate h1{font-size:18px;margin:0 0 6px;color:var(--blue)}
-  #gate p{font-size:13px;color:var(--muted);margin:0 0 18px}
+  #gate p{font-size:13px;color:var(--muted);margin:0 0 18px;line-height:1.5}
   #gate input{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:8px;font-size:15px;margin-bottom:12px}
   #gate button{width:100%;padding:12px;background:var(--blue);color:#fff;border:0;border-radius:8px;font-size:15px;cursor:pointer}
   #gate button:disabled{opacity:.6;cursor:wait}
   #gatemsg{font-size:13px;color:var(--red);min-height:18px;margin-top:10px}
-  /* ---- dashboard ---- */
-  #app{display:none}
-  header.top{background:var(--blue);color:#fff;padding:14px 20px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
-  header.top h1{font-size:18px;margin:0}
-  header.top .stamp{font-size:12px;opacity:.85}
-  .wrap{padding:20px;max-width:1200px;margin:0 auto}
-  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:24px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
-  .card .n{font-size:26px;font-weight:700;color:var(--blue)}
-  .card .l{font-size:12px;color:var(--muted);margin-top:4px}
-  h2{font-size:15px;color:var(--blue);margin:24px 0 10px;border-left:4px solid var(--blue);padding-left:8px}
-  table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden;font-size:13px}
-  th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line)}
-  th{background:#eef2f7;font-weight:600;color:#33414f}
-  tr:last-child td{border-bottom:0}
-  .search{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:14px;margin-bottom:10px}
-  .muted{color:var(--muted);font-size:12px}
-  .pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px}
-  .pill.on{background:#e2f2e5;color:var(--green)}
-  .pill.off{background:#fbe6e6;color:var(--red)}
+  #progress{height:4px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:14px;display:none}
+  #progress>div{height:100%;background:var(--blue);width:0%;transition:width .15s}
+  #loadinfo{font-size:12px;color:var(--muted);margin-top:8px;display:none}
+  #frame{display:none;width:100vw;height:100vh;border:0}
 </style>
 </head>
 <body>
-
-<!-- ============ PASSWORD GATE (this is ALL a no-password visitor sees) ============ -->
 <div id="gate">
   <div class="box">
     <h1>🔒 產品符號庫</h1>
-    <p>This dashboard is password-protected.<br/>此頁面受密碼保護。資料在你的瀏覽器內即時解密。</p>
+    <p>This dashboard is password-protected. The full app &amp; data are decrypted locally in your browser.<br/>此頁面受密碼保護，完整應用與資料會在你的瀏覽器內即時解密（不會上傳密碼）。</p>
     <input id="pw" type="password" placeholder="Password / 密碼" autocomplete="current-password" />
     <button id="unlock">Unlock / 解鎖</button>
+    <div id="progress"><div></div></div>
+    <div id="loadinfo"></div>
     <div id="gatemsg"></div>
   </div>
 </div>
-
-<!-- ============ DASHBOARD (hidden until decrypt succeeds) ============ -->
-<div id="app">
-  <header class="top">
-    <h1>產品符號庫 · Product Token Library</h1>
-    <span class="stamp" id="stamp"></span>
-  </header>
-  <div class="wrap">
-    <div class="cards" id="cards"></div>
-
-    <h2>主分類 Main Categories</h2>
-    <table id="cattable"><thead><tr><th>代碼</th><th>名稱</th><th>SKU 數</th></tr></thead><tbody></tbody></table>
-
-    <h2>SKU 列表</h2>
-    <input class="search" id="q" placeholder="搜尋 SKU 名稱 / barcode / token…" />
-    <div class="muted" id="skucount"></div>
-    <table id="skutable"><thead><tr><th>SKU 名稱</th><th>Barcode</th><th>群組</th><th>Token</th><th>狀態</th></tr></thead><tbody></tbody></table>
-  </div>
-</div>
+<iframe id="frame" title="dashboard"></iframe>
 
 <script>
-/* ============================================================
- * In-browser AES-GCM decryption gate.
- * The data file (data.json.enc) is PBKDF2+AES-256-GCM ciphertext.
- * The password NEVER leaves this page; decryption is 100% local
- * via the WebCrypto API. Wrong password = decryption throws = nothing shown.
- * ============================================================ */
 const $ = (s) => document.querySelector(s);
 
 async function deriveKey(password, salt) {
-  const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
-  return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
-    keyMaterial,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['decrypt']
-  );
+  const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name:'PBKDF2', salt, iterations:100000, hash:'SHA-256' }, km, { name:'AES-GCM', length:256 }, false, ['decrypt']);
 }
 
-async function decryptData(password) {
-  const res = await fetch('data.json.enc');
-  if (!res.ok) throw new Error('data.json.enc not found (' + res.status + ')');
-  const buf = new Uint8Array(await res.arrayBuffer());
-  // file layout: [16B salt][12B iv][ciphertext]
-  const salt = buf.slice(0, 16);
-  const iv = buf.slice(16, 28);
-  const ct = buf.slice(28);
-  const key = await deriveKey(password, salt);
-  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct); // throws on wrong password
-  return JSON.parse(new TextDecoder().decode(plain));
-}
-
-function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-
-function render(data) {
-  $('#gate').style.display = 'none';
-  $('#app').style.display = 'block';
-  const o = data.overview || {};
-  $('#stamp').textContent = '更新: ' + (o.last_price_refresh || data.generated_at || '');
-
-  const cardDefs = [
-    ['skus','SKU 總數'],['product_tokens','Token'],['product_keys','Product Key'],
-    ['large_groups','主分類'],['online_count','Online'],['offline_count','Offline'],
-    ['missing_price','缺價格'],['skus_review','待覆核']
-  ];
-  $('#cards').innerHTML = cardDefs.map(([k,l]) =>
-    `<div class="card"><div class="n">${o[k]!=null?o[k]:'—'}</div><div class="l">${l}</div></div>`).join('');
-
-  const cats = data.main_categories || [];
-  $('#cattable tbody').innerHTML = cats.map(c =>
-    `<tr><td>${esc(c.code||'')}</td><td>${esc(c.name||c.group_name||'')}</td><td>${c.sku_count!=null?c.sku_count:''}</td></tr>`).join('');
-
-  const skus = data.skus || [];
-  const drawRows = (rows) => {
-    $('#skucount').textContent = `顯示 ${rows.length} / ${skus.length} 個 SKU`;
-    $('#skutable tbody').innerHTML = rows.slice(0,500).map(s =>
-      `<tr><td>${esc(s.raw_sku_name)}</td><td>${esc(s.barcode||'')}</td><td>${esc(s.group_name||'')}</td><td>${esc(s.token_name||'')}</td>`+
-      `<td><span class="pill ${s.mapping_status==='AUTO_MATCHED'||s.review_status==='CONFIRMED'?'on':'off'}">${esc(s.mapping_status||s.review_status||'')}</span></td></tr>`).join('');
-  };
-  drawRows(skus);
-  $('#q').addEventListener('input', (e) => {
-    const q = e.target.value.trim().toLowerCase();
-    if (!q) return drawRows(skus);
-    drawRows(skus.filter(s => [s.raw_sku_name,s.barcode,s.token_name,s.group_name].join(' ').toLowerCase().includes(q)));
-  });
+function setProgress(pct, info) {
+  $('#progress').style.display = 'block';
+  $('#progress > div').style.width = pct + '%';
+  const li = $('#loadinfo'); li.style.display = 'block'; li.textContent = info;
 }
 
 async function unlock() {
@@ -145,12 +55,41 @@ async function unlock() {
   $('#gatemsg').textContent = '';
   if (!pw) { $('#gatemsg').textContent = '請輸入密碼'; return; }
   $('#unlock').disabled = true;
-  $('#gatemsg').textContent = '解密中…';
   try {
-    const data = await decryptData(pw);
-    render(data);
+    // 1. download the encrypted app with progress
+    setProgress(2, '下載加密資料… downloading…');
+    const res = await fetch('app.enc');
+    if (!res.ok) throw new Error('app.enc not found (' + res.status + ')');
+    const total = parseInt(res.headers.get('Content-Length') || '0', 10);
+    const reader = res.body.getReader();
+    const chunks = []; let received = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value); received += value.length;
+      if (total) setProgress(2 + Math.round(received / total * 68), `下載中 ${(received/1048576).toFixed(1)} / ${(total/1048576).toFixed(1)} MB`);
+    }
+    const buf = new Uint8Array(received); let off = 0;
+    for (const c of chunks) { buf.set(c, off); off += c.length; }
+
+    // 2. decrypt (wrong password throws here)
+    setProgress(74, '解密中… decrypting…');
+    const salt = buf.slice(0, 16), iv = buf.slice(16, 28), ct = buf.slice(28);
+    const key = await deriveKey(pw, salt);
+    const plainBuf = await crypto.subtle.decrypt({ name:'AES-GCM', iv }, key, ct);
+
+    // 3. load the decrypted HTML (the full app) into the iframe via blob URL.
+    //    Type text/html preserves the document exactly; the app's inline scripts run.
+    setProgress(92, '啟動應用… launching…');
+    const blob = new Blob([plainBuf], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    $('#gate').style.display = 'none';
+    const fr = $('#frame'); fr.style.display = 'block';
+    fr.src = url;
   } catch (e) {
+    console.error(e);
     $('#gatemsg').textContent = '❌ 密碼錯誤或資料損毀 (wrong password)';
+    $('#progress').style.display = 'none'; $('#loadinfo').style.display = 'none';
     $('#unlock').disabled = false;
   }
 }

@@ -272,7 +272,7 @@ function DrillSkus({
     style: {
       textAlign: 'right'
     }
-  }, "售價"), showRank && /*#__PURE__*/React.createElement("th", null, rankHdr))), /*#__PURE__*/React.createElement("tbody", null, data.map(s => /*#__PURE__*/React.createElement("tr", {
+  }, "售價"), showRank && /*#__PURE__*/React.createElement("th", null, rankHdr), /*#__PURE__*/React.createElement("th", null, "有貨 Top1"))), /*#__PURE__*/React.createElement("tbody", null, data.map(s => /*#__PURE__*/React.createElement("tr", {
     key: s.id
   }, /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(ChanBadge, {
     sku: s.sku_id
@@ -290,7 +290,13 @@ function DrillSkus({
     className: "badge b-red"
   }, "是 · Rank 1 / ", s.key_group_size) : /*#__PURE__*/React.createElement("span", {
     className: "badge b-grey"
-  }, "否 · Rank ", s.key_rank, " / ", s.key_group_size)))))));
+  }, "否 · Rank ", s.key_rank, " / ", s.key_group_size)), /*#__PURE__*/React.createElement("td", null, s.is_real_top1 ? s.real_top1_offset > 0 ? /*#__PURE__*/React.createElement("span", {
+    className: "badge b-amber"
+  }, "有貨Top1 ↑", s.real_top1_offset) : /*#__PURE__*/React.createElement("span", {
+    className: "badge b-green"
+  }, "有貨Top1") : /*#__PURE__*/React.createElement("span", {
+    className: "muted small"
+  }, "—")))))));
 }
 // H = HKTVmall 自家 (sku starts with H); M = merchant / 非 HKTVmall.
 function ChanBadge({
@@ -301,6 +307,92 @@ function ChanBadge({
     className: "chan-badge " + (isH ? "chan-h" : "chan-m"),
     title: isH ? "HKTVmall 自家產品" : "非 HKTVmall（商家）產品"
   }, isH ? 'H' : 'M');
+}
+
+// Per-Key cheapest ranking badge. cheapest_rank 1 = 最平 (normal logic).
+// is_real_top1 = the buyable top-1 (cheapest IN-STOCK). When the cheapest is OOS,
+// the real top-1 falls to the next in-stock SKU (real_top1_offset = how many cheaper are OOS above it).
+function RankBadge({
+  s
+}) {
+  if (!s || s.cheapest_rank == null) return /*#__PURE__*/React.createElement("span", {
+    className: "muted small"
+  }, "—");
+  const size = s.cheapest_group_size;
+  const cheap = s.is_cheapest ? /*#__PURE__*/React.createElement("span", {
+    className: "badge b-blue",
+    title: `Key 內最平（共 ${size} 個）`
+  }, "最平 #1/", size) : /*#__PURE__*/React.createElement("span", {
+    className: "badge b-grey",
+    title: `Key 內第 ${s.cheapest_rank} 平（共 ${size} 個）`
+  }, "#", s.cheapest_rank, "/", size);
+  let real = null;
+  if (s.is_real_top1) {
+    real = s.real_top1_offset > 0 ? /*#__PURE__*/React.createElement("span", {
+      className: "badge b-amber",
+      title: `最平 ${s.real_top1_offset} 個缺貨，呢個先係而家有貨最平`
+    }, "有貨Top1 ↑", s.real_top1_offset) : /*#__PURE__*/React.createElement("span", {
+      className: "badge b-green",
+      title: "呢個就係 Key 內有貨最平"
+    }, "有貨Top1");
+  }
+  return /*#__PURE__*/React.createElement("span", {
+    style: {
+      whiteSpace: 'nowrap'
+    }
+  }, cheap, real && /*#__PURE__*/React.createElement("span", {
+    style: {
+      marginLeft: 4
+    }
+  }, real));
+}
+
+// 總覽 panel: how many Product Keys' "cheapest" (rank-1) SKU is ALSO the real top-1 (in stock).
+function CheapestRealPanel() {
+  const {
+    data,
+    err,
+    loading
+  } = useData('/api/cheapest-real-overview');
+  if (loading) return /*#__PURE__*/React.createElement(Loading, null);
+  if (err) return /*#__PURE__*/React.createElement(Err, {
+    m: err
+  });
+  if (!data) return null;
+  const pct = data.cheapest_total ? Math.round(data.cheapest_is_real / data.cheapest_total * 100) : 0;
+  return /*#__PURE__*/React.createElement("div", {
+    className: "cards"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "num",
+    style: {
+      color: 'var(--green,#16a34a)'
+    }
+  }, data.cheapest_is_real), /*#__PURE__*/React.createElement("div", {
+    className: "lbl"
+  }, "最平＝有貨Top1（最平有貨）")), /*#__PURE__*/React.createElement("div", {
+    className: "card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "num",
+    style: {
+      color: 'var(--amber,#d97706)'
+    }
+  }, data.cheapest_not_real), /*#__PURE__*/React.createElement("div", {
+    className: "lbl"
+  }, "最平缺貨（非有貨Top1）")), /*#__PURE__*/React.createElement("div", {
+    className: "card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "num"
+  }, data.real_substituted), /*#__PURE__*/React.createElement("div", {
+    className: "lbl"
+  }, "有貨Top1係次平/更後")), /*#__PURE__*/React.createElement("div", {
+    className: "card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "num"
+  }, pct, "%"), /*#__PURE__*/React.createElement("div", {
+    className: "lbl"
+  }, "最平有貨比例（共 ", data.cheapest_total, " Keys）")));
 }
 function Overview() {
   const {
@@ -390,6 +482,13 @@ function Overview() {
     key: visDrill,
     onClose: () => setVisDrill(null)
   }), /*#__PURE__*/React.createElement("div", {
+    className: "panel"
+  }, /*#__PURE__*/React.createElement("h3", null, "最平 / 有貨 Top1 總覽"), /*#__PURE__*/React.createElement("div", {
+    className: "small muted",
+    style: {
+      marginBottom: 8
+    }
+  }, "每個 Product Key 的「最平」第 1 名，而家有幾多個同時係「有貨 Top1」（最平嗰個有貨）。最平缺貨時，有貨 Top1 會落到次平、第三平…"), /*#__PURE__*/React.createElement(CheapestRealPanel, null)), /*#__PURE__*/React.createElement("div", {
     className: "grid2"
   }, /*#__PURE__*/React.createElement("div", {
     className: "panel"
@@ -523,7 +622,7 @@ function VisDrill({
     style: {
       textAlign: 'right'
     }
-  }, "折後價"), /*#__PURE__*/React.createElement("th", null, "顯示狀態"))), /*#__PURE__*/React.createElement("tbody", null, data.rows.map(s => /*#__PURE__*/React.createElement("tr", {
+  }, "折後價"), /*#__PURE__*/React.createElement("th", null, "Key 排名"), /*#__PURE__*/React.createElement("th", null, "顯示狀態"))), /*#__PURE__*/React.createElement("tbody", null, data.rows.map(s => /*#__PURE__*/React.createElement("tr", {
     key: s.id
   }, /*#__PURE__*/React.createElement("td", {
     className: "mono small"
@@ -542,7 +641,9 @@ function VisDrill({
       textAlign: 'right'
     },
     className: "small"
-  }, s.discount_price != null ? '$' + s.discount_price : '—'), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(VisBadge, {
+  }, s.discount_price != null ? '$' + s.discount_price : '—'), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(RankBadge, {
+    s: s
+  })), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(VisBadge, {
     v: s.is_invisible
   }))))))), pg && pg.total_pages > 1 && /*#__PURE__*/React.createElement(Pagination, {
     pg: pg,
@@ -1943,7 +2044,7 @@ function SubCatSkus({
     className: "table-wrap"
   }, /*#__PURE__*/React.createElement("table", {
     className: "sku-table"
-  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "SKU ID"), /*#__PURE__*/React.createElement("th", null, "品牌"), /*#__PURE__*/React.createElement("th", null, "產品名稱"), /*#__PURE__*/React.createElement("th", null, "規格"), /*#__PURE__*/React.createElement("th", null, "Product Token"), /*#__PURE__*/React.createElement("th", null, "折後價"), /*#__PURE__*/React.createElement("th", null, "顯示狀態"), /*#__PURE__*/React.createElement("th", null, "庫存狀態"), /*#__PURE__*/React.createElement("th", null, "價格更新"), /*#__PURE__*/React.createElement("th", null, "庫存更新"), /*#__PURE__*/React.createElement("th", null, "覆核"))), /*#__PURE__*/React.createElement("tbody", null, data.rows.map(s => /*#__PURE__*/React.createElement(React.Fragment, {
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "SKU ID"), /*#__PURE__*/React.createElement("th", null, "品牌"), /*#__PURE__*/React.createElement("th", null, "產品名稱"), /*#__PURE__*/React.createElement("th", null, "規格"), /*#__PURE__*/React.createElement("th", null, "Product Token"), /*#__PURE__*/React.createElement("th", null, "折後價"), /*#__PURE__*/React.createElement("th", null, "Key 排名"), /*#__PURE__*/React.createElement("th", null, "顯示狀態"), /*#__PURE__*/React.createElement("th", null, "庫存狀態"), /*#__PURE__*/React.createElement("th", null, "價格更新"), /*#__PURE__*/React.createElement("th", null, "庫存更新"), /*#__PURE__*/React.createElement("th", null, "覆核"))), /*#__PURE__*/React.createElement("tbody", null, data.rows.map(s => /*#__PURE__*/React.createElement(React.Fragment, {
     key: s.id
   }, /*#__PURE__*/React.createElement(CatSkuRow, {
     s: s
@@ -1980,7 +2081,9 @@ function CatSkuRow({
     className: "small"
   }, s.packing_spec || '—'), /*#__PURE__*/React.createElement("td", {
     className: "small"
-  }, s.product_token || /*#__PURE__*/React.createElement(Null, null)), /*#__PURE__*/React.createElement("td", null, fmt$(s.discount_price)), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(VisBadge, {
+  }, s.product_token || /*#__PURE__*/React.createElement(Null, null)), /*#__PURE__*/React.createElement("td", null, fmt$(s.discount_price)), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(RankBadge, {
+    s: s
+  })), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(VisBadge, {
     v: s.is_invisible
   })), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(StockBadge2, {
     s: s.stock_status

@@ -91,7 +91,7 @@ function DrillSkus({status, tokenId}){
   const showRank = status==='OUT_OF_STOCK' || status==='LOW_STOCK';
   const rankHdr = status==='OUT_OF_STOCK' ? '缺貨且 Key 內最平（Rank 1）' : 'Key 內最平（Rank 1）';
   return <div className="table-wrap"><table>
-    <thead><tr><th>來源</th><th>SKU</th><th>產品名稱</th><th>Product Key</th><th style={{textAlign:'right'}}>售價</th>{showRank && <th>{rankHdr}</th>}</tr></thead>
+    <thead><tr><th>來源</th><th>SKU</th><th>產品名稱</th><th>Product Key</th><th style={{textAlign:'right'}}>售價</th>{showRank && <th>{rankHdr}</th>}<th>有貨 Top1</th></tr></thead>
     <tbody>{data.map(s=> <tr key={s.id}>
       <td><ChanBadge sku={s.sku_id}/></td>
       <td className="mono small">{s.sku_id}</td>
@@ -99,10 +99,44 @@ function DrillSkus({status, tokenId}){
       <td className="small muted">{s.display_key||'—'}</td>
       <td style={{textAlign:'right'}}>{fmt$(s.discount_price)}</td>
       {showRank && <td>{s.is_cheapest? <span className="badge b-red">是 · Rank 1 / {s.key_group_size}</span> : <span className="badge b-grey">否 · Rank {s.key_rank} / {s.key_group_size}</span>}</td>}
+      <td>{s.is_real_top1? (s.real_top1_offset>0? <span className="badge b-amber">有貨Top1 ↑{s.real_top1_offset}</span> : <span className="badge b-green">有貨Top1</span>) : <span className="muted small">—</span>}</td>
     </tr>)}</tbody></table></div>;
 }
 // H = HKTVmall 自家 (sku starts with H); M = merchant / 非 HKTVmall.
 function ChanBadge({sku}){ const isH = /^H/.test(String(sku||'')); return <span className={"chan-badge "+(isH?"chan-h":"chan-m")} title={isH?"HKTVmall 自家產品":"非 HKTVmall（商家）產品"}>{isH?'H':'M'}</span>; }
+
+// Per-Key cheapest ranking badge. cheapest_rank 1 = 最平 (normal logic).
+// is_real_top1 = the buyable top-1 (cheapest IN-STOCK). When the cheapest is OOS,
+// the real top-1 falls to the next in-stock SKU (real_top1_offset = how many cheaper are OOS above it).
+function RankBadge({s}){
+  if(!s || s.cheapest_rank==null) return <span className="muted small">—</span>;
+  const size = s.cheapest_group_size;
+  const cheap = s.is_cheapest
+    ? <span className="badge b-blue" title={`Key 內最平（共 ${size} 個）`}>最平 #1/{size}</span>
+    : <span className="badge b-grey" title={`Key 內第 ${s.cheapest_rank} 平（共 ${size} 個）`}>#{s.cheapest_rank}/{size}</span>;
+  let real = null;
+  if(s.is_real_top1){
+    real = s.real_top1_offset>0
+      ? <span className="badge b-amber" title={`最平 ${s.real_top1_offset} 個缺貨，呢個先係而家有貨最平`}>有貨Top1 ↑{s.real_top1_offset}</span>
+      : <span className="badge b-green" title="呢個就係 Key 內有貨最平">有貨Top1</span>;
+  }
+  return <span style={{whiteSpace:'nowrap'}}>{cheap}{real && <span style={{marginLeft:4}}>{real}</span>}</span>;
+}
+
+// 總覽 panel: how many Product Keys' "cheapest" (rank-1) SKU is ALSO the real top-1 (in stock).
+function CheapestRealPanel(){
+  const {data,err,loading}=useData('/api/cheapest-real-overview');
+  if(loading) return <Loading/>;
+  if(err) return <Err m={err}/>;
+  if(!data) return null;
+  const pct = data.cheapest_total? Math.round(data.cheapest_is_real/data.cheapest_total*100) : 0;
+  return <div className="cards">
+    <div className="card"><div className="num" style={{color:'var(--green,#16a34a)'}}>{data.cheapest_is_real}</div><div className="lbl">最平＝有貨Top1（最平有貨）</div></div>
+    <div className="card"><div className="num" style={{color:'var(--amber,#d97706)'}}>{data.cheapest_not_real}</div><div className="lbl">最平缺貨（非有貨Top1）</div></div>
+    <div className="card"><div className="num">{data.real_substituted}</div><div className="lbl">有貨Top1係次平/更後</div></div>
+    <div className="card"><div className="num">{pct}%</div><div className="lbl">最平有貨比例（共 {data.cheapest_total} Keys）</div></div>
+  </div>;
+}
 
 function Overview(){
   const {data,err,loading}=useData('/api/overview');
@@ -136,6 +170,10 @@ function Overview(){
       </div>
     </div>
     {visDrill && <VisDrill state={visDrill} key={visDrill} onClose={()=>setVisDrill(null)}/>}
+    <div className="panel"><h3>最平 / 有貨 Top1 總覽</h3>
+      <div className="small muted" style={{marginBottom:8}}>每個 Product Key 的「最平」第 1 名，而家有幾多個同時係「有貨 Top1」（最平嗰個有貨）。最平缺貨時，有貨 Top1 會落到次平、第三平…</div>
+      <CheapestRealPanel/>
+    </div>
     <div className="grid2">
       <div className="panel"><h3>數據更新狀態</h3>
         <dl className="kv">
@@ -183,7 +221,7 @@ function VisDrill({state, onClose}){
       !data||!data.rows.length? <div className="empty small">無資料</div> :
       <>
       <div className="table-wrap"><table className="sku-table">
-        <thead><tr><th>SKU ID</th><th>品牌</th><th>產品名稱</th><th>規格</th><th>Main Cat</th><th>Sub Cat</th><th style={{textAlign:'right'}}>折後價</th><th>顯示狀態</th></tr></thead>
+        <thead><tr><th>SKU ID</th><th>品牌</th><th>產品名稱</th><th>規格</th><th>Main Cat</th><th>Sub Cat</th><th style={{textAlign:'right'}}>折後價</th><th>Key 排名</th><th>顯示狀態</th></tr></thead>
         <tbody>{data.rows.map(s=> <tr key={s.id}>
           <td className="mono small">{s.sku_id}</td>
           <td className="small">{s.brand||'—'}</td>
@@ -192,6 +230,7 @@ function VisDrill({state, onClose}){
           <td className="small">{s.main_cat||'—'}</td>
           <td className="small">{s.sub_cat||'—'}</td>
           <td style={{textAlign:'right'}} className="small">{s.discount_price!=null?('$'+s.discount_price):'—'}</td>
+          <td><RankBadge s={s}/></td>
           <td><VisBadge v={s.is_invisible}/></td>
         </tr>)}</tbody>
       </table></div>
@@ -693,7 +732,7 @@ function SubCatSkus({code,tokenId,tokenName,onBack,onBackAll}){
         <div className="table-wrap"><table className="sku-table">
           <thead><tr>
             <th>SKU ID</th><th>品牌</th><th>產品名稱</th><th>規格</th><th>Product Token</th>
-            <th>折後價</th><th>顯示狀態</th><th>庫存狀態</th><th>價格更新</th><th>庫存更新</th><th>覆核</th>
+            <th>折後價</th><th>Key 排名</th><th>顯示狀態</th><th>庫存狀態</th><th>價格更新</th><th>庫存更新</th><th>覆核</th>
           </tr></thead>
           <tbody>{data.rows.map(s=> <React.Fragment key={s.id}>
             <CatSkuRow s={s}/>
@@ -716,6 +755,7 @@ function CatSkuRow({s}){
       <td className="small">{s.packing_spec||'—'}</td>
       <td className="small">{s.product_token||<Null/>}</td>
       <td>{fmt$(s.discount_price)}</td>
+      <td><RankBadge s={s}/></td>
       <td><VisBadge v={s.is_invisible}/></td>
       <td><StockBadge2 s={s.stock_status}/></td>
       <td className="small muted">{fmtTime(s.price_updated_at)}</td>

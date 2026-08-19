@@ -167,7 +167,16 @@ const Skus = {
     if (conds.length) sql += ' WHERE ' + conds.join(' AND ');
     sql += ' ORDER BY s.id DESC LIMIT ? OFFSET ?';
     params.push(limit, offset);
-    return db.all(sql, params);
+    const rows = db.all(sql, params);
+    // Enrich with per-Key cheapest ranking (full key membership).
+    const keyIds = [...new Set(rows.map((r) => r.product_key_id).filter((x) => x != null))];
+    const rankMap = keyRankMap(db, keyIds);
+    return rows.map((r) => {
+      const rk = rankMap[r.id] || {};
+      return { ...r, cheapest_rank: rk.cheapest_rank, cheapest_group_size: rk.cheapest_group_size,
+        is_cheapest: !!rk.is_cheapest, is_real_top1: !!rk.is_real_top1,
+        real_rank: rk.real_rank, real_top1_offset: rk.real_top1_offset };
+    });
   },
   count(db, filters = {}) { return this.list(db, { ...filters, limit: 100000 }).length; },
   get(db, id) {
@@ -273,6 +282,103 @@ const _latestStock = `LEFT JOIN (
       FROM sku_stock_observations o
     ) WHERE rn = 1
   ) ls ON ls.sku_id = s.id`;
+
+// ---------- Cheapest ranking (per Product Key group) ----------
+// "cheapest_rank": rank of the SKU within its Product Key by effective price (rank 1 = cheapest).
+// "real_rank" (real top-1): the cheapest SKU that is currently IN STOCK. If the cheapest is
+// out of stock, the real top-1 falls to the next cheapest in-stock SKU, and so on.
+// A SKU has real_rank set ONLY if it is the in-stock "real top-1" of its key (real_rank===1
+// meaning it is the buyable top pick). We expose:
+//   cheapest_rank, cheapest_group_size, is_cheapest      -> normal logic
+//   real_rank (=1 when this SKU is the real top-1), is_real_top1, real_top1_offset
+// real_top1_offset = how many cheaper SKUs are out of stock above this real top-1
+// (0 = cheapest is also real; 1 = cheapest OOS so 2nd is real top-1; etc.)
+
+// Compute ranking for an arbitrary list of SKU row objects that each carry
+// product_key_id, effective_price_minor, stock_status. Mutates + returns the rows.
+// Ranking is done per product_key_id across the FULL key membership (not just the
+// page passed in), so callers should pass the full-set rank map when paginating.
+function computeKeyRanks(rows) {
+  const byKey = {};
+  for (const r of rows) {
+    if (r.product_key_id == null) continue;
+    (byKey[r.product_key_id] = byKey[r.product_key_id] || []).push(r);
+  }
+  for (const kid of Object.keys(byKey)) {
+    const arr = byKey[kid].slice().sort((a, b) => {
+      const pa = a.effective_price_minor, pb = b.effective_price_minor;
+      if (pa == null && pb == null) return 0;
+      if (pa == null) return 1;   // nulls last
+      if (pb == null) return -1;
+      return pa - pb;
+    });
+    const size = arr.length;
+    // normal cheapest rank
+    arr.forEach((r, i) => {
+      r.cheapest_rank = i + 1;
+      r.cheapest_group_size = size;
+      r.is_cheapest = (i === 0);
+    });
+    // real top-1 = first in-stock in the price-sorted order
+    const inStock = (r) => r.stock_status === 'IN_STOCK' || r.stock_status === 'LOW_STOCK';
+    let realIdx = -1;
+    for (let i = 0; i < arr.length; i++) { if (inStock(arr[i])) { realIdx = i; break; } }
+    arr.forEach((r, i) => {
+      r.is_real_top1 = (i === realIdx);
+      r.real_rank = (i === realIdx) ? 1 : null;
+      // offset: for the real top-1, how many cheaper SKUs above it are out of stock
+      r.real_top1_offset = (i === realIdx) ? realIdx : null;
+    });
+  }
+  return rows;
+}
+
+// Load the full key-membership rank map for a set of key ids (so pagination windows
+// rank against the whole key, not just the visible page). Returns {skuId -> rank fields}.
+function keyRankMap(db, keyIds) {
+  if (!keyIds || !keyIds.length) return {};
+  const ph = keyIds.map(() => '?').join(',');
+  const rows = db.all(`
+    SELECT s.id, s.product_key_id, lp.effective_price_minor, ls.stock_status
+    FROM sku_records s ${_latestPrice} ${_latestStock}
+    WHERE s.active=1 AND s.product_key_id IN (${ph})`, keyIds);
+  computeKeyRanks(rows);
+  const map = {};
+  for (const r of rows) {
+    map[r.id] = {
+      cheapest_rank: r.cheapest_rank, cheapest_group_size: r.cheapest_group_size,
+      is_cheapest: r.is_cheapest, is_real_top1: r.is_real_top1,
+      real_rank: r.real_rank, real_top1_offset: r.real_top1_offset,
+    };
+  }
+  return map;
+}
+
+// Overview: of all keys' "cheapest" (rank-1) SKUs, how many are ALSO the real top-1
+// (i.e. the cheapest is in stock) vs NOT (cheapest is OOS, so a pricier SKU is the buyable top).
+function cheapestRealOverview(db) {
+  const rows = db.all(`
+    SELECT s.id, s.product_key_id, lp.effective_price_minor, ls.stock_status
+    FROM sku_records s ${_latestPrice} ${_latestStock}
+    WHERE s.active=1 AND s.product_key_id IS NOT NULL`, []);
+  computeKeyRanks(rows);
+  let cheapest_total = 0, cheapest_is_real = 0, cheapest_not_real = 0;
+  let real_substituted = 0; // keys where the real top-1 is NOT the cheapest (someone cheaper is OOS)
+  for (const r of rows) {
+    if (r.is_cheapest) {
+      cheapest_total++;
+      if (r.is_real_top1) cheapest_is_real++; else cheapest_not_real++;
+    }
+    if (r.is_real_top1 && r.real_top1_offset > 0) real_substituted++;
+  }
+  return {
+    cheapest_total,
+    cheapest_is_real,          // cheapest top-1 IS the real top-1 (cheapest in stock)
+    cheapest_not_real,         // cheapest top-1 is OOS (NOT the real top-1)
+    real_substituted,          // keys whose real top-1 is a pricier substitute
+    keys_total: cheapest_total,
+  };
+}
 
 const Categories = {
   // Main Cat cards: per-group rollup incl. operational counts.
@@ -404,7 +510,7 @@ const Categories = {
 
     const rows = db.all(`
       SELECT s.id, s.external_sku_id AS sku_id, s.raw_sku_name AS product_name,
-             s.review_status, s.mapping_confidence,
+             s.review_status, s.mapping_confidence, s.product_key_id,
              b.display_name AS brand, k.display_pack_format AS packing_spec,
              t.name_zh AS product_token, g.name_zh AS main_cat, sc.name_zh AS sub_cat,
              lp.effective_price_minor, lp.observed_at AS price_updated_at,
@@ -422,16 +528,26 @@ const Categories = {
       ORDER BY ${sortCol} ${sortDir}, s.id ASC
       LIMIT ? OFFSET ?`, [...params, pageSize, (page - 1) * pageSize]);
 
+    // Enrich with per-Key cheapest ranking (against FULL key membership, not just this page).
+    const keyIds = [...new Set(rows.map((r) => r.product_key_id).filter((x) => x != null))];
+    const rankMap = keyRankMap(db, keyIds);
+
     return {
       main_cat: { code: sc.main_code, name: sc.main_name },
       sub_cat: { code: sc.sub_cat_code, name: sc.name_zh },
       pagination: { page, page_size: pageSize, total_rows: total, total_pages: totalPages },
-      rows: rows.map((r) => ({
-        ...r,
-        discount_price: r.effective_price_minor != null ? r.effective_price_minor / 100 : null,
-        is_invisible: r.current_is_invisible == null ? null : !!r.current_is_invisible,
-        effective_price_minor: undefined, current_is_invisible: undefined,
-      })),
+      rows: rows.map((r) => {
+        const rk = rankMap[r.id] || {};
+        return {
+          ...r,
+          discount_price: r.effective_price_minor != null ? r.effective_price_minor / 100 : null,
+          is_invisible: r.current_is_invisible == null ? null : !!r.current_is_invisible,
+          cheapest_rank: rk.cheapest_rank, cheapest_group_size: rk.cheapest_group_size,
+          is_cheapest: !!rk.is_cheapest, is_real_top1: !!rk.is_real_top1,
+          real_rank: rk.real_rank, real_top1_offset: rk.real_top1_offset,
+          effective_price_minor: undefined, current_is_invisible: undefined,
+        };
+      }),
     };
   },
 
@@ -501,7 +617,8 @@ const Categories = {
         ORDER BY t.priority DESC, t.name_zh`, [sc.id]);
     },
     // SKUs of one Product Token with the given stock status, each ranked within its Product Key
-    // group by effective price (rank 1 = cheapest). is_cheapest flags rank 1.
+    // group by effective price (rank 1 = cheapest). Ranking uses the shared computeKeyRanks
+    // against the FULL key membership so a filtered view still ranks correctly.
     skus(db, status, tokenId) {
       const cond = this._cond(status);
       const rows = db.all(`
@@ -515,25 +632,21 @@ const Categories = {
         ${_latestPrice} ${_latestStock}
         WHERE s.product_token_id=? AND s.active=1 AND ${cond}
         ORDER BY k.display_key, lp.effective_price_minor`, [tokenId]);
-      // rank within each product_key_id by effective price (nulls last, stable)
-      const byKey = {};
-      for (const r of rows) (byKey[r.product_key_id] = byKey[r.product_key_id] || []).push(r);
-      for (const kid of Object.keys(byKey)) {
-        const arr = byKey[kid].slice().sort((a, b) => {
-          const pa = a.effective_price_minor, pb = b.effective_price_minor;
-          if (pa == null && pb == null) return 0;
-          if (pa == null) return 1;
-          if (pb == null) return -1;
-          return pa - pb;
-        });
-        arr.forEach((r, i) => { r.key_rank = i + 1; r.key_group_size = arr.length; });
-      }
-      return rows.map((r) => ({
-        ...r,
-        discount_price: r.effective_price_minor != null ? r.effective_price_minor / 100 : null,
-        is_cheapest: r.key_rank === 1,
-        effective_price_minor: undefined,
-      }));
+      // Rank against full key membership (the token filter may hide same-key siblings).
+      const keyIds = [...new Set(rows.map((r) => r.product_key_id).filter((x) => x != null))];
+      const rankMap = keyRankMap(db, keyIds);
+      return rows.map((r) => {
+        const rk = rankMap[r.id] || {};
+        return {
+          ...r,
+          discount_price: r.effective_price_minor != null ? r.effective_price_minor / 100 : null,
+          // keep legacy field names for the existing UI, plus the new real-top1 fields
+          key_rank: rk.cheapest_rank, key_group_size: rk.cheapest_group_size, is_cheapest: !!rk.is_cheapest,
+          cheapest_rank: rk.cheapest_rank, cheapest_group_size: rk.cheapest_group_size,
+          is_real_top1: !!rk.is_real_top1, real_rank: rk.real_rank, real_top1_offset: rk.real_top1_offset,
+          effective_price_minor: undefined,
+        };
+      });
     },
   },
 
@@ -624,4 +737,4 @@ function statDrill(db, kind, { limit = 50, offset = 0 } = {}) {
   }
 }
 
-module.exports = { Groups, Tokens, Keys, Skus, Audit, Categories, overview, statDrill, packFormat, trimNum };
+module.exports = { Groups, Tokens, Keys, Skus, Audit, Categories, overview, statDrill, cheapestRealOverview, keyRankMap, computeKeyRanks, packFormat, trimNum };

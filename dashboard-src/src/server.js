@@ -82,6 +82,7 @@ async function createApp(dbFile) {
     if (!out) return sendError(res, 404, 'Unknown stat-drill kind: ' + p.kind);
     sendJson(res, 200, out);
   });
+  r.get('/api/cheapest-real-overview', (req, res) => sendJson(res, 200, repo.cheapestRealOverview(db)));
   r.patch('/api/sub-categories/:code', async (req, res, p) => {
     const body = await readJson(req);
     // Block deactivating is allowed (deactivate, not delete). Guard: cannot move a Sub Cat
@@ -309,6 +310,7 @@ async function createApp(dbFile) {
     const offset = parseInt(q.offset || '0', 10) || 0;
     const rows = db.all(`
       SELECT s.id, s.external_sku_id AS sku_id, s.raw_sku_name AS product_name,
+             s.product_key_id,
              g.name_zh AS main_cat, sc.name_zh AS sub_cat, b.display_name AS brand,
              k.display_pack_format AS packing_spec,
              soc.current_is_invisible, soc.current_discount_price_minor,
@@ -323,7 +325,16 @@ async function createApp(dbFile) {
       ORDER BY g.display_order, sc.display_order, s.external_sku_id
       LIMIT ? OFFSET ?`, [state, limit, offset]);
     const total = db.get(`SELECT COUNT(*) c FROM sku_records s JOIN sku_operational_current soc ON soc.sku_id=s.external_sku_id WHERE s.active=1 AND soc.current_is_invisible=?`, [state]).c;
-    sendJson(res, 200, { total, rows: rows.map((r) => ({ ...r, discount_price: r.current_discount_price_minor != null ? r.current_discount_price_minor / 100 : null, is_invisible: r.current_is_invisible === 1, current_discount_price_minor: undefined })) });
+    // Enrich with per-Key cheapest ranking (full key membership).
+    const keyIds = [...new Set(rows.map((r) => r.product_key_id).filter((x) => x != null))];
+    const rankMap = repo.keyRankMap(db, keyIds);
+    sendJson(res, 200, { total, rows: rows.map((r) => {
+      const rk = rankMap[r.id] || {};
+      return { ...r, discount_price: r.current_discount_price_minor != null ? r.current_discount_price_minor / 100 : null, is_invisible: r.current_is_invisible === 1,
+        cheapest_rank: rk.cheapest_rank, cheapest_group_size: rk.cheapest_group_size, is_cheapest: !!rk.is_cheapest,
+        is_real_top1: !!rk.is_real_top1, real_rank: rk.real_rank, real_top1_offset: rk.real_top1_offset,
+        current_discount_price_minor: undefined };
+    }) });
   });
 
   // refresh / ingestion

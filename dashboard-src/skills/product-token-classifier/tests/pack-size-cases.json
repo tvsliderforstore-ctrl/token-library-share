@@ -1,0 +1,15 @@
+[
+  { "input": "250ml x 24支", "unit_size": 250, "unit_measurement": "ml", "pack_count": 24, "pack_unit": "支" },
+  { "input": "250ML X24", "unit_size": 250, "unit_measurement": "ml", "pack_count": 24, "pack_unit": null },
+  { "input": "250毫升×24支", "unit_size": 250, "unit_measurement": "ml", "pack_count": 24, "pack_unit": "支" },
+  { "input": "250 ml x 24", "unit_size": 250, "unit_measurement": "ml", "pack_count": 24, "pack_unit": null },
+  { "input": "1000ml", "unit_size": 1000, "unit_measurement": "ml", "pack_count": null },
+  { "input": "1L", "unit_size": 1, "unit_measurement": "L", "pack_count": null },
+  { "input": "1公升", "unit_size": 1, "unit_measurement": "L", "pack_count": null },
+  { "input": "1000ml x 4支", "unit_size": 1000, "unit_measurement": "ml", "pack_count": 4, "pack_unit": "支" },
+  { "input": "1000ml四支裝", "unit_size": 1000, "unit_measurement": "ml", "pack_count": 4, "pack_unit": "支" },
+  { "input": "250毫升24支", "unit_size": 250, "unit_measurement": "ml", "pack_count": 24, "pack_unit": "支" },
+  { "input": "北海道3.6牛乳", "unit_size": null, "note": "3.6 is a percentage, not a size" },
+  { "input": "500克", "unit_size": 500, "unit_measurement": "g" },
+  { "input": "2公斤", "unit_size": 2, "unit_measurement": "kg" }
+]

@@ -33,7 +33,7 @@ function Layout({children, route}){
     <div className="main">{children}</div>
   </div>;
 }
-function Page({title, sub, children}){ return <div><h2 className="page-title">{title}</h2><div className="page-sub">{sub}</div>{children}</div>; }
+function Page({title, sub, subRight, children}){ return <div><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',flexWrap:'wrap',gap:8}}><div><h2 className="page-title">{title}</h2><div className="page-sub">{sub}</div></div>{subRight && <div className="small muted" style={{textAlign:'right'}}>{subRight}</div>}</div>{children}</div>; }
 const Loading = ()=> <div className="empty">載入中…</div>;
 const Err = ({m})=> m? <div className="err">錯誤：{m}</div> : null;
 
@@ -187,19 +187,20 @@ function CheapestRealDrill({kind, onClose}){
 
 function Overview(){
   const {data,err,loading}=useData('/api/overview');
-  const {data:skill}=useData('/api/system/skill-status');
   const {data:cat}=useData('/api/categories/overview');
   const [stockDrill,setStockDrill]=useState(null);   // 'IN_STOCK' | 'OUT_OF_STOCK' | null
   const [visDrill,setVisDrill]=useState(null);       // 'visible' | 'invisible' | null
   const [statDrill,setStatDrill]=useState(null);     // top-card drill key | null
   if(loading) return <Loading/>;
   const cards = [
-    ['Main Cat', data.large_groups, 'large-groups'],['產品符號', data.product_tokens, 'tokens'],['Product Keys', data.product_keys, 'keys'],['SKUs', data.skus, 'skus'],
-    ['自動匹配', data.skus_auto_matched, 'auto-matched'],['待覆核', data.skus_review, 'review'],
-    ['無 Key 的符號', data.tokens_without_keys, 'tokens-no-keys'],['無 SKU 的 Key', data.keys_without_skus, 'keys-no-skus'],
-    ['缺價格', data.missing_price, 'missing-price'],
+    ['Main Cat', data.large_groups, 'large-groups'],['SKUs', data.skus, 'skus'],
   ];
-  return <Page title="總覽" sub="產品庫整體狀況與數據新鮮度">
+  const freshness = <>
+    最後線上狀態更新：{fmtTime(data.last_visibility_refresh)}<br/>
+    最後價格更新：{fmtTime(data.last_price_refresh)}<br/>
+    最後庫存更新：{fmtTime(data.last_stock_refresh)}
+  </>;
+  return <Page title="總覽" sub="產品庫整體狀況" subRight={freshness}>
     <Err m={err}/>
     <div className="cards">{cards.map(([l,v,k])=> <button className="card card-btn" key={l} onClick={()=>setStatDrill(statDrill===k?null:k)}><div className="num">{v??0}</div><div className="lbl">{l} →</div></button>)}</div>
     {statDrill && <StatDrill kind={statDrill} key={statDrill} onClose={()=>setStatDrill(null)}/>}
@@ -222,15 +223,6 @@ function Overview(){
       <CheapestRealPanel/>
     </div>
     <div className="grid2">
-      <div className="panel"><h3>數據更新狀態</h3>
-        <dl className="kv">
-          <dt>最後線上狀態更新</dt><dd>{fmtTime(data.last_visibility_refresh)}</dd>
-          <dt>最後價格更新</dt><dd>{fmtTime(data.last_price_refresh)}</dd>
-          <dt>最後庫存更新</dt><dd>{fmtTime(data.last_stock_refresh)}</dd>
-          <dt>價格技能</dt><dd>{skill? <span className={"badge "+(skill.price_skill.connected?'b-green':'b-red')}>{skill.price_skill.name}</span>:'…'}</dd>
-          <dt>庫存技能</dt><dd>{skill? <span className={"badge "+(skill.stock_skill.connected?'b-green':'b-red')}>{skill.stock_skill.name}{skill.stock_skill.connected?'':' (not connected)'}</span>:'…'}</dd>
-        </dl>
-      </div>
       <div className="panel"><h3>最近修正</h3>
         {data.recent_corrections && data.recent_corrections.length? <table><tbody>
           {data.recent_corrections.slice(0,8).map(c=> <tr key={c.id}><td className="small">{c.entity_type}</td><td className="small">{c.action}</td><td className="small muted">{fmtTime(c.created_at)}</td></tr>)}

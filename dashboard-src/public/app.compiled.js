@@ -121,13 +121,27 @@ function Layout({
 function Page({
   title,
   sub,
+  subRight,
   children
 }) {
-  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h2", {
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'baseline',
+      flexWrap: 'wrap',
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h2", {
     className: "page-title"
   }, title), /*#__PURE__*/React.createElement("div", {
     className: "page-sub"
-  }, sub), children);
+  }, sub)), subRight && /*#__PURE__*/React.createElement("div", {
+    className: "small muted",
+    style: {
+      textAlign: 'right'
+    }
+  }, subRight)), children);
 }
 const Loading = () => /*#__PURE__*/React.createElement("div", {
   className: "empty"
@@ -508,19 +522,18 @@ function Overview() {
     loading
   } = useData('/api/overview');
   const {
-    data: skill
-  } = useData('/api/system/skill-status');
-  const {
     data: cat
   } = useData('/api/categories/overview');
   const [stockDrill, setStockDrill] = useState(null); // 'IN_STOCK' | 'OUT_OF_STOCK' | null
   const [visDrill, setVisDrill] = useState(null); // 'visible' | 'invisible' | null
   const [statDrill, setStatDrill] = useState(null); // top-card drill key | null
   if (loading) return /*#__PURE__*/React.createElement(Loading, null);
-  const cards = [['Main Cat', data.large_groups, 'large-groups'], ['產品符號', data.product_tokens, 'tokens'], ['Product Keys', data.product_keys, 'keys'], ['SKUs', data.skus, 'skus'], ['自動匹配', data.skus_auto_matched, 'auto-matched'], ['待覆核', data.skus_review, 'review'], ['無 Key 的符號', data.tokens_without_keys, 'tokens-no-keys'], ['無 SKU 的 Key', data.keys_without_skus, 'keys-no-skus'], ['缺價格', data.missing_price, 'missing-price']];
+  const cards = [['Main Cat', data.large_groups, 'large-groups'], ['SKUs', data.skus, 'skus']];
+  const freshness = /*#__PURE__*/React.createElement(React.Fragment, null, "最後線上狀態更新：", fmtTime(data.last_visibility_refresh), /*#__PURE__*/React.createElement("br", null), "最後價格更新：", fmtTime(data.last_price_refresh), /*#__PURE__*/React.createElement("br", null), "最後庫存更新：", fmtTime(data.last_stock_refresh));
   return /*#__PURE__*/React.createElement(Page, {
     title: "總覽",
-    sub: "產品庫整體狀況與數據新鮮度"
+    sub: "產品庫整體狀況",
+    subRight: freshness
   }, /*#__PURE__*/React.createElement(Err, {
     m: err
   }), /*#__PURE__*/React.createElement("div", {
@@ -598,14 +611,6 @@ function Overview() {
   }, "每個 Product Key 的「最平」第 1 名，而家有幾多個同時係「有貨 Top1」（最平嗰個有貨）。最平缺貨時，有貨 Top1 會落到次平、第三平…"), /*#__PURE__*/React.createElement(CheapestRealPanel, null)), /*#__PURE__*/React.createElement("div", {
     className: "grid2"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "panel"
-  }, /*#__PURE__*/React.createElement("h3", null, "數據更新狀態"), /*#__PURE__*/React.createElement("dl", {
-    className: "kv"
-  }, /*#__PURE__*/React.createElement("dt", null, "最後線上狀態更新"), /*#__PURE__*/React.createElement("dd", null, fmtTime(data.last_visibility_refresh)), /*#__PURE__*/React.createElement("dt", null, "最後價格更新"), /*#__PURE__*/React.createElement("dd", null, fmtTime(data.last_price_refresh)), /*#__PURE__*/React.createElement("dt", null, "最後庫存更新"), /*#__PURE__*/React.createElement("dd", null, fmtTime(data.last_stock_refresh)), /*#__PURE__*/React.createElement("dt", null, "價格技能"), /*#__PURE__*/React.createElement("dd", null, skill ? /*#__PURE__*/React.createElement("span", {
-    className: "badge " + (skill.price_skill.connected ? 'b-green' : 'b-red')
-  }, skill.price_skill.name) : '…'), /*#__PURE__*/React.createElement("dt", null, "庫存技能"), /*#__PURE__*/React.createElement("dd", null, skill ? /*#__PURE__*/React.createElement("span", {
-    className: "badge " + (skill.stock_skill.connected ? 'b-green' : 'b-red')
-  }, skill.stock_skill.name, skill.stock_skill.connected ? '' : ' (not connected)') : '…'))), /*#__PURE__*/React.createElement("div", {
     className: "panel"
   }, /*#__PURE__*/React.createElement("h3", null, "最近修正"), data.recent_corrections && data.recent_corrections.length ? /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("tbody", null, data.recent_corrections.slice(0, 8).map(c => /*#__PURE__*/React.createElement("tr", {
     key: c.id

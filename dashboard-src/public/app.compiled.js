@@ -435,10 +435,7 @@ function Overview() {
     err,
     loading
   } = useData('/api/overview');
-  const {
-    data: cat
-  } = useData('/api/categories/overview');
-  const [stockDrill, setStockDrill] = useState(null); // 'IN_STOCK' | 'OUT_OF_STOCK' | null
+  const [stockDrill, setStockDrill] = useState(null); // 'IN_STOCK' | 'OUT_OF_STOCK' | 'LOW_STOCK' | 'OFFLINE' | null
   const [visDrill, setVisDrill] = useState(null); // 'visible' | 'invisible' | null
   const [statDrill, setStatDrill] = useState(null); // top-card drill key | null
   if (loading) return /*#__PURE__*/React.createElement(Loading, null);
@@ -471,6 +468,13 @@ function Overview() {
     key: statDrill,
     onClose: () => setStatDrill(null)
   }), /*#__PURE__*/React.createElement("div", {
+    className: "panel"
+  }, /*#__PURE__*/React.createElement("h3", null, "最平 / 有貨 Top1 總覽"), /*#__PURE__*/React.createElement("div", {
+    className: "small muted",
+    style: {
+      marginBottom: 8
+    }
+  }, "每個 Product Key 的「最平」第 1 名，而家有幾多個同時係「有貨 Top1」（最平嗰個有貨）。最平缺貨時，有貨 Top1 會落到次平、第三平…"), /*#__PURE__*/React.createElement(CheapestRealPanel, null)), /*#__PURE__*/React.createElement("div", {
     className: "panel"
   }, /*#__PURE__*/React.createElement("h3", null, "價格與庫存總覽"), /*#__PURE__*/React.createElement("div", {
     className: "small muted",
@@ -529,74 +533,7 @@ function Overview() {
     key: 'vis' + visDrill,
     title: visDrill === 'invisible' ? '隱藏（離線）' : '可見（線上）',
     onClose: () => setVisDrill(null)
-  }), /*#__PURE__*/React.createElement("div", {
-    className: "panel"
-  }, /*#__PURE__*/React.createElement("h3", null, "最平 / 有貨 Top1 總覽"), /*#__PURE__*/React.createElement("div", {
-    className: "small muted",
-    style: {
-      marginBottom: 8
-    }
-  }, "每個 Product Key 的「最平」第 1 名，而家有幾多個同時係「有貨 Top1」（最平嗰個有貨）。最平缺貨時，有貨 Top1 會落到次平、第三平…"), /*#__PURE__*/React.createElement(CheapestRealPanel, null)), cat && /*#__PURE__*/React.createElement("div", {
-    className: "panel",
-    style: {
-      marginTop: 14
-    }
-  }, /*#__PURE__*/React.createElement("h3", null, "分類概況（Main Cat / Sub Cat）"), /*#__PURE__*/React.createElement("div", {
-    className: "cards",
-    style: {
-      marginBottom: 12
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "num"
-  }, cat.skus_missing_subcat), /*#__PURE__*/React.createElement("div", {
-    className: "lbl"
-  }, "SKUs 缺 Sub Cat")), /*#__PURE__*/React.createElement("div", {
-    className: "card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "num"
-  }, cat.subcat_conflicts), /*#__PURE__*/React.createElement("div", {
-    className: "lbl"
-  }, "Main/Sub 衝突")), /*#__PURE__*/React.createElement("div", {
-    className: "card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "num"
-  }, cat.largest_subcat ? cat.largest_subcat.cnt : 0), /*#__PURE__*/React.createElement("div", {
-    className: "lbl"
-  }, "最大 Sub Cat", cat.largest_subcat ? '：' + cat.largest_subcat.name : '')), /*#__PURE__*/React.createElement("div", {
-    className: "card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "num"
-  }, cat.subcats_with_missing_price), /*#__PURE__*/React.createElement("div", {
-    className: "lbl"
-  }, "缺價 Sub Cats")), /*#__PURE__*/React.createElement("div", {
-    className: "card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "num"
-  }, cat.subcats_with_missing_stock), /*#__PURE__*/React.createElement("div", {
-    className: "lbl"
-  }, "缺庫存 Sub Cats")), /*#__PURE__*/React.createElement("div", {
-    className: "card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "num"
-  }, cat.subcats_requiring_review), /*#__PURE__*/React.createElement("div", {
-    className: "lbl"
-  }, "待覆核 Sub Cats"))), /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Main Cat"), /*#__PURE__*/React.createElement("th", null, "Sub Cat"), /*#__PURE__*/React.createElement("th", {
-    style: {
-      textAlign: 'right'
-    }
-  }, "SKU 數"))), /*#__PURE__*/React.createElement("tbody", null, (cat.sku_count_by_cat || []).map((r, i) => /*#__PURE__*/React.createElement("tr", {
-    key: i
-  }, /*#__PURE__*/React.createElement("td", {
-    className: "small"
-  }, r.main_cat), /*#__PURE__*/React.createElement("td", {
-    className: "small"
-  }, r.sub_cat), /*#__PURE__*/React.createElement("td", {
-    style: {
-      textAlign: 'right'
-    }
-  }, r.cnt)))))));
+  }));
 }
 
 // Stat drill panel: shows what each top-card count includes.

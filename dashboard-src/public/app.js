@@ -149,8 +149,7 @@ const CR_DRILL_TITLE = {
 
 function Overview(){
   const {data,err,loading}=useData('/api/overview');
-  const {data:cat}=useData('/api/categories/overview');
-  const [stockDrill,setStockDrill]=useState(null);   // 'IN_STOCK' | 'OUT_OF_STOCK' | null
+  const [stockDrill,setStockDrill]=useState(null);   // 'IN_STOCK' | 'OUT_OF_STOCK' | 'LOW_STOCK' | 'OFFLINE' | null
   const [visDrill,setVisDrill]=useState(null);       // 'visible' | 'invisible' | null
   const [statDrill,setStatDrill]=useState(null);     // top-card drill key | null
   if(loading) return <Loading/>;
@@ -169,6 +168,10 @@ function Overview(){
       <div className="card"><div className="num">{data.skus??0}</div><div className="lbl">SKUs</div></div>
     </div>
     {statDrill && <StatDrill kind={statDrill} key={statDrill} onClose={()=>setStatDrill(null)}/>}
+    <div className="panel"><h3>最平 / 有貨 Top1 總覽</h3>
+      <div className="small muted" style={{marginBottom:8}}>每個 Product Key 的「最平」第 1 名，而家有幾多個同時係「有貨 Top1」（最平嗰個有貨）。最平缺貨時，有貨 Top1 會落到次平、第三平…</div>
+      <CheapestRealPanel/>
+    </div>
     <div className="panel"><h3>價格與庫存總覽</h3>
       <div className="small muted" style={{marginBottom:8}}>SKU 層級的價格與庫存觀測。摘要按 Key / 符號 / Main Cat 計算，觀測永在 SKU 層。</div>
       <PriceStockSummary onPick={setStockDrill}/>
@@ -182,22 +185,6 @@ function Overview(){
       </div>
     </div>
     {visDrill && <TreeDrillPanel sel={{fam:'vis',state:visDrill}} key={'vis'+visDrill} title={visDrill==='invisible'?'隱藏（離線）':'可見（線上）'} onClose={()=>setVisDrill(null)}/>}
-    <div className="panel"><h3>最平 / 有貨 Top1 總覽</h3>
-      <div className="small muted" style={{marginBottom:8}}>每個 Product Key 的「最平」第 1 名，而家有幾多個同時係「有貨 Top1」（最平嗰個有貨）。最平缺貨時，有貨 Top1 會落到次平、第三平…</div>
-      <CheapestRealPanel/>
-    </div>
-    {cat && <div className="panel" style={{marginTop:14}}><h3>分類概況（Main Cat / Sub Cat）</h3>
-      <div className="cards" style={{marginBottom:12}}>
-        <div className="card"><div className="num">{cat.skus_missing_subcat}</div><div className="lbl">SKUs 缺 Sub Cat</div></div>
-        <div className="card"><div className="num">{cat.subcat_conflicts}</div><div className="lbl">Main/Sub 衝突</div></div>
-        <div className="card"><div className="num">{cat.largest_subcat?cat.largest_subcat.cnt:0}</div><div className="lbl">最大 Sub Cat{cat.largest_subcat?('：'+cat.largest_subcat.name):''}</div></div>
-        <div className="card"><div className="num">{cat.subcats_with_missing_price}</div><div className="lbl">缺價 Sub Cats</div></div>
-        <div className="card"><div className="num">{cat.subcats_with_missing_stock}</div><div className="lbl">缺庫存 Sub Cats</div></div>
-        <div className="card"><div className="num">{cat.subcats_requiring_review}</div><div className="lbl">待覆核 Sub Cats</div></div>
-      </div>
-      <table><thead><tr><th>Main Cat</th><th>Sub Cat</th><th style={{textAlign:'right'}}>SKU 數</th></tr></thead>
-        <tbody>{(cat.sku_count_by_cat||[]).map((r,i)=> <tr key={i}><td className="small">{r.main_cat}</td><td className="small">{r.sub_cat}</td><td style={{textAlign:'right'}}>{r.cnt}</td></tr>)}</tbody></table>
-    </div>}
   </Page>;
 }
 

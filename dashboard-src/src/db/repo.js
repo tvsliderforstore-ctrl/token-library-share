@@ -471,16 +471,20 @@ const Categories = {
   },
 
   // Distinct brands present in one Sub Cat (for the brand filter dropdown).
+  // Pass subCatCode = 'ALL' to list brands across every active SKU.
   brandsInSub(db, subCatCode) {
-    const sc = this.getSub(db, subCatCode);
-    if (!sc) return null;
+    const isAll = !subCatCode || String(subCatCode).toUpperCase() === 'ALL';
+    const sc = isAll ? null : this.getSub(db, subCatCode);
+    if (!isAll && !sc) return null;
+    const where = isAll ? 's.active=1' : 's.sub_category_id=? AND s.active=1';
+    const params = isAll ? [] : [sc.id];
     return db.all(`
       SELECT DISTINCT b.display_name AS brand
       FROM sku_records s
       JOIN product_keys k ON k.id = s.product_key_id
       JOIN brands b ON b.id = k.brand_id
-      WHERE s.sub_category_id=? AND s.active=1 AND b.display_name IS NOT NULL
-      ORDER BY b.display_name`, [sc.id]).map((r) => r.brand);
+      WHERE ${where} AND b.display_name IS NOT NULL
+      ORDER BY b.display_name`, params).map((r) => r.brand);
   },
 
   // Product Tokens present in one Sub Cat (with live SKU counts), for the
@@ -509,15 +513,18 @@ const Categories = {
   },
 
   // Paginated, filtered SKU list for one Sub Cat. Server-side only.
+  // Pass subCatCode = 'ALL' (or null) to list across every active SKU (分類瀏覽 direct view).
   skusInSub(db, subCatCode, opts = {}) {
-    const sc = this.getSub(db, subCatCode);
-    if (!sc) return null;
+    const isAll = !subCatCode || String(subCatCode).toUpperCase() === 'ALL';
+    const sc = isAll ? null : this.getSub(db, subCatCode);
+    if (!isAll && !sc) return null;
     let page = parseInt(opts.page, 10); if (!(page >= 1)) page = 1;
     let pageSize = parseInt(opts.page_size, 10); if (!(pageSize >= 1)) pageSize = 30;
     if (pageSize > 100) pageSize = 100;
 
-    const where = ['s.sub_category_id = ?', 's.active = 1'];
-    const params = [sc.id];
+    const where = ['s.active = 1'];
+    const params = [];
+    if (!isAll) { where.push('s.sub_category_id = ?'); params.push(sc.id); }
     if (opts.sku_id) { where.push('s.external_sku_id = ?'); params.push(String(opts.sku_id).trim()); }
     if (opts.brand) { where.push('b.display_name = ?'); params.push(opts.brand); }
     if (opts.product_token) { where.push('t.name_zh = ?'); params.push(opts.product_token); }
@@ -576,8 +583,8 @@ const Categories = {
     const rankMap = keyRankMap(db, keyIds);
 
     return {
-      main_cat: { code: sc.main_code, name: sc.main_name },
-      sub_cat: { code: sc.sub_cat_code, name: sc.name_zh },
+      main_cat: sc ? { code: sc.main_code, name: sc.main_name } : null,
+      sub_cat: sc ? { code: sc.sub_cat_code, name: sc.name_zh } : null,
       pagination: { page, page_size: pageSize, total_rows: total, total_pages: totalPages },
       rows: rows.map((r) => {
         const rk = rankMap[r.id] || {};

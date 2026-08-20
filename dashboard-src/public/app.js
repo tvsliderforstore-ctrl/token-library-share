@@ -538,121 +538,29 @@ const StockBadge2 = ({s})=>{ const m=STOCK_LABEL[s]||['b-grey',s||'離線']; ret
 const VisBadge = ({v})=> v==null? <span className="muted small">—</span> : v? <span className="badge b-amber">隱藏</span> : <span className="badge b-green">顯示</span>;
 
 // Accordion of the 10 Main Cats; expanding one shows its Sub Cats (approved order).
+// 分類瀏覽 now shows ALL SKUs directly with the full search/filter UI (no accordion drill).
 function Categories(){
-  const {data:mains,err,loading,reload}=useData('/api/main-categories');
-  const [open,setOpen]=useState(null);        // open Main Cat code
-  const [sub,setSub]=useState(null);          // selected Sub Cat code
-  const [sort,setSort]=useState('order');
-  if(loading&&!mains) return <Loading/>;
-  if(sub) return <SubCatTokens code={sub} onBack={()=>setSub(null)} onBackAll={()=>{setSub(null);setOpen(null);}}/>;
-  return <Page title="分類瀏覽" sub="Main Cat → Sub Cat → 產品符號 → SKU。點擊 Main Cat 展開其子類，再點子類查看產品符號。">
-    <Err m={err}/>
-    {err && <button className="ghost" onClick={reload}>重試</button>}
-    <div className="cat-accordion" role="list">
-      {(mains||[]).map(m=> <MainCatCard key={m.code} m={m} open={open===m.code} sort={sort} setSort={setSort}
-        onToggle={()=>setOpen(open===m.code?null:m.code)} onPickSub={(code)=>setSub(code)}/>)}
-    </div>
-  </Page>;
+  return <AllSkusView/>;
 }
 
-function MainCatCard({m,open,sort,setSort,onToggle,onPickSub}){
-  const {data,err,loading}=useData(open?('/api/main-categories/'+m.code+'/sub-categories?sort='+sort):null,[open,sort]);
-  return <div className={"cat-card"+(open?' open':'')} role="listitem">
-    <button className="cat-head" aria-expanded={open} onClick={onToggle}>
-      <span className="cat-name">{m.name}</span>
-      <span className="cat-meta small muted">
-        {m.subcat_count} Sub Cats · {m.sku_count} SKUs
-        {m.in_stock_count? ` · 有貨 ${m.in_stock_count}`:''}
-        {m.out_of_stock_count? ` · 缺貨 ${m.out_of_stock_count}`:''}
-        {m.review_count? ` · 待覆核 ${m.review_count}`:''}
-      </span>
-      <span className="cat-caret" aria-hidden="true">{open?'▾':'▸'}</span>
-    </button>
-    {open && <div className="cat-body">
-      <div className="toolbar">
-        <label className="small muted">排序：</label>
-        <select value={sort} onChange={e=>setSort(e.target.value)} aria-label="Sub Cat 排序">
-          <option value="order">核准順序</option>
-          <option value="count_desc">SKU 數（多→少）</option>
-          <option value="count_asc">SKU 數（少→多）</option>
-          <option value="name">名稱 A–Z</option>
-        </select>
-      </div>
-      {loading? <Loading/> : err? <Err m={err}/> :
-        (data && data.sub_cats && data.sub_cats.length? <div className="sub-list">
-          {data.sub_cats.map(s=> <button key={s.code} className="sub-row" onClick={()=>onPickSub(s.code)}>
-            <span className="sub-name">{s.name}</span>
-            <span className="small muted">
-              {s.sku_count} SKUs
-              {s.missing_price_count? ` · 缺價 ${s.missing_price_count}`:''}
-              {s.missing_stock_count? ` · 缺庫存 ${s.missing_stock_count}`:''}
-              {s.review_count? ` · 待覆核 ${s.review_count}`:''}
-            </span>
-          </button>)}
-        </div> : <div className="empty">No Sub Cat configured（分類設定問題）</div>)}
-    </div>}
-  </div>;
-}
-
-// Product Token list for one Sub Cat: drill-down level between Sub Cat and SKUs.
-function SubCatTokens({code,onBack,onBackAll}){
-  const {data,err,loading}=useData('/api/sub-categories/'+code+'/tokens',[code]);
-  const [pick,setPick]=useState(null);   // {id,name} | {all:true}
-  if(pick) return <SubCatSkus code={code} tokenId={pick.all?null:pick.id} tokenName={pick.all?null:pick.name} onBack={()=>setPick(null)} onBackAll={onBackAll}/>;
-  return <Page title="分類瀏覽" sub="">
-    <nav className="crumb small" aria-label="breadcrumb">
-      <button className="linklike" onClick={onBackAll}>分類瀏覽</button>
-      {data&&<> <span className="muted">›</span> <button className="linklike" onClick={onBack}>{data.main_cat.name}</button>
-        <span className="muted">›</span> <b>{data.sub_cat.name}</b></>}
-    </nav>
-    {loading? <Loading/> : err? <div><Err m={err}/></div> :
-      !data||!data.tokens||!data.tokens.length? <div className="empty">此 Sub Cat 暫時沒有產品符號</div> :
-      <div className="panel">
-        <div className="toolbar" style={{marginBottom:10}}>
-          <span className="small muted">{data.tokens.length} 個產品符號 · 點擊查看其 SKU，或</span>
-          <button className="ghost" onClick={()=>setPick({all:true})}>查看所有 SKU →</button>
-        </div>
-        <div className="sub-list">
-          {data.tokens.map(t=> <button key={t.id} className="sub-row" onClick={()=>setPick({id:t.id,name:t.name})}>
-            <span className="sub-name">{t.name}</span>
-            <span className="small muted">
-              {t.sku_count} SKUs
-              {t.in_stock_count? ` · 有貨 ${t.in_stock_count}`:''}
-              {t.low_stock_count? ` · 少貨 ${t.low_stock_count}`:''}
-              {t.out_of_stock_count? ` · 缺貨 ${t.out_of_stock_count}`:''}
-            </span>
-          </button>)}
-        </div>
-      </div>}
-  </Page>;
-}
-
-// SKU list for one Sub Cat: server-side pagination + filters + search.
-function SubCatSkus({code,tokenId,tokenName,onBack,onBackAll}){
+// Direct all-SKU browser for 分類瀏覽: server-side pagination + the same filters
+// you'd see after pressing into a product token (keyword / SKU id / brand /
+// visibility / stock / review / 缺價 / 缺庫存).
+function AllSkusView(){
   const [page,setPage]=useState(1);
   const [pageSize]=useState(30);
-  const [f,setF]=useState({brand:'',product_token:'',visibility:'',stock_status:'',review_status:'',missing_price:'',missing_stock:'',keyword:'',sku_id:''});
+  const [f,setF]=useState({brand:'',visibility:'',stock_status:'',review_status:'',missing_price:'',missing_stock:'',keyword:'',sku_id:''});
   const qs = new URLSearchParams({page:String(page),page_size:String(pageSize)});
-  if(tokenId) qs.set('token_id',String(tokenId));
   Object.entries(f).forEach(([k,v])=>{ if(v) qs.set(k,v); });
-  const {data,err,loading}=useData('/api/sub-categories/'+code+'/skus?'+qs.toString(),[code,tokenId,page,JSON.stringify(f)]);
-  const {data:brands}=useData('/api/sub-categories/'+code+'/brands',[code]);
+  const {data,err,loading}=useData('/api/skus/all?'+qs.toString(),[page,JSON.stringify(f)]);
+  const {data:brands}=useData('/api/skus/all/brands');
   const set=(k,v)=>{ setPage(1); setF(prev=>({...prev,[k]:v})); };
-  const reset=()=>{ setPage(1); setF({brand:'',product_token:'',visibility:'',stock_status:'',review_status:'',missing_price:'',missing_stock:'',keyword:'',sku_id:''}); };
+  const reset=()=>{ setPage(1); setF({brand:'',visibility:'',stock_status:'',review_status:'',missing_price:'',missing_stock:'',keyword:'',sku_id:''}); };
   const pg = data&&data.pagination;
-  return <Page title="分類瀏覽" sub="">
-    <nav className="crumb small" aria-label="breadcrumb">
-      <button className="linklike" onClick={onBackAll}>分類瀏覽</button>
-      {data&&<> <span className="muted">›</span> <button className="linklike" onClick={onBackAll}>{data.main_cat.name}</button>
-        <span className="muted">›</span> <button className="linklike" onClick={onBack}>{data.sub_cat.name}</button>
-        {tokenName&&<> <span className="muted">›</span> <b>{tokenName}</b></>}
-        {!tokenName&&<> <span className="muted">›</span> <b>所有 SKU</b></>}</>}
-    </nav>
+  const hasFilter = Object.values(f).some(v=>v);
+  return <Page title="分類瀏覽" sub="直接瀏覽全部 SKU。可用關鍵字 / SKU ID / 品牌 / 顯示 / 庫存 / 覆核 篩選。">
+    <Err m={err}/>
     <div className="panel">
-      {tokenName&&<div className="toolbar" style={{marginBottom:8}}>
-        <span className="tag">產品符號：{tokenName}</span>
-        <button className="linklike small" onClick={onBack}>← 返回產品符號</button>
-      </div>}
       <div className="toolbar filters">
         <input placeholder="關鍵字（名稱/SKU/品牌/規格）" value={f.keyword} onChange={e=>set('keyword',e.target.value)} aria-label="關鍵字"/>
         <input placeholder="SKU ID" value={f.sku_id} onChange={e=>set('sku_id',e.target.value)} aria-label="SKU ID"/>
@@ -660,14 +568,14 @@ function SubCatSkus({code,tokenId,tokenName,onBack,onBackAll}){
           <option value="">全部品牌</option>
           {(brands||[]).map(b=> <option key={b} value={b}>{b}</option>)}
         </select>
-        <select value={f.visibility} onChange={e=>set('visibility',e.target.value)} aria-label="顯示狀態">
+        <select value={f.visibility} onChange={e=>set('visibility',e.target.value)} aria-label="顯示/隱藏">
           <option value="">顯示/隱藏</option><option value="visible">顯示</option><option value="invisible">隱藏</option>
         </select>
         <select value={f.stock_status} onChange={e=>set('stock_status',e.target.value)} aria-label="庫存狀態">
           <option value="">全部庫存</option><option value="IN_STOCK">有貨</option><option value="LOW_STOCK">少貨</option>
           <option value="OUT_OF_STOCK">缺貨</option><option value="PREORDER">預購</option><option value="UNKNOWN">離線</option>
         </select>
-        <select value={f.review_status} onChange={e=>set('review_status',e.target.value)} aria-label="覆核狀態">
+        <select value={f.review_status} onChange={e=>set('review_status',e.target.value)} aria-label="覆核">
           <option value="">全部覆核</option><option value="PENDING">待覆核</option><option value="CONFIRMED">已確認</option><option value="NONE">無</option>
         </select>
         <label className="small"><input type="checkbox" checked={!!f.missing_price} onChange={e=>set('missing_price',e.target.checked?'1':'')}/> 缺價</label>
@@ -675,7 +583,7 @@ function SubCatSkus({code,tokenId,tokenName,onBack,onBackAll}){
         <button className="ghost" onClick={reset}>重設</button>
       </div>
       {loading? <Loading/> : err? <div><Err m={err}/></div> :
-        !data || !data.rows.length? <div className="empty">{Object.values(f).some(v=>v)?'沒有符合條件的 SKU':'此 Sub Cat 暫時沒有 SKU'} {Object.values(f).some(v=>v) && <button className="ghost" onClick={reset}>清除篩選</button>}</div> :
+        !data || !data.rows.length? <div className="empty">{hasFilter?'沒有符合條件的 SKU':'暫時沒有 SKU'} {hasFilter && <button className="ghost" onClick={reset}>清除篩選</button>}</div> :
         <>
         <div className="table-wrap"><table className="sku-table">
           <thead><tr>

@@ -1556,190 +1556,19 @@ const VisBadge = ({
 }, "顯示");
 
 // Accordion of the 10 Main Cats; expanding one shows its Sub Cats (approved order).
+// 分類瀏覽 now shows ALL SKUs directly with the full search/filter UI (no accordion drill).
 function Categories() {
-  const {
-    data: mains,
-    err,
-    loading,
-    reload
-  } = useData('/api/main-categories');
-  const [open, setOpen] = useState(null); // open Main Cat code
-  const [sub, setSub] = useState(null); // selected Sub Cat code
-  const [sort, setSort] = useState('order');
-  if (loading && !mains) return /*#__PURE__*/React.createElement(Loading, null);
-  if (sub) return /*#__PURE__*/React.createElement(SubCatTokens, {
-    code: sub,
-    onBack: () => setSub(null),
-    onBackAll: () => {
-      setSub(null);
-      setOpen(null);
-    }
-  });
-  return /*#__PURE__*/React.createElement(Page, {
-    title: "分類瀏覽",
-    sub: "Main Cat → Sub Cat → 產品符號 → SKU。點擊 Main Cat 展開其子類，再點子類查看產品符號。"
-  }, /*#__PURE__*/React.createElement(Err, {
-    m: err
-  }), err && /*#__PURE__*/React.createElement("button", {
-    className: "ghost",
-    onClick: reload
-  }, "重試"), /*#__PURE__*/React.createElement("div", {
-    className: "cat-accordion",
-    role: "list"
-  }, (mains || []).map(m => /*#__PURE__*/React.createElement(MainCatCard, {
-    key: m.code,
-    m: m,
-    open: open === m.code,
-    sort: sort,
-    setSort: setSort,
-    onToggle: () => setOpen(open === m.code ? null : m.code),
-    onPickSub: code => setSub(code)
-  }))));
-}
-function MainCatCard({
-  m,
-  open,
-  sort,
-  setSort,
-  onToggle,
-  onPickSub
-}) {
-  const {
-    data,
-    err,
-    loading
-  } = useData(open ? '/api/main-categories/' + m.code + '/sub-categories?sort=' + sort : null, [open, sort]);
-  return /*#__PURE__*/React.createElement("div", {
-    className: "cat-card" + (open ? ' open' : ''),
-    role: "listitem"
-  }, /*#__PURE__*/React.createElement("button", {
-    className: "cat-head",
-    "aria-expanded": open,
-    onClick: onToggle
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "cat-name"
-  }, m.name), /*#__PURE__*/React.createElement("span", {
-    className: "cat-meta small muted"
-  }, m.subcat_count, " Sub Cats · ", m.sku_count, " SKUs", m.in_stock_count ? ` · 有貨 ${m.in_stock_count}` : '', m.out_of_stock_count ? ` · 缺貨 ${m.out_of_stock_count}` : '', m.review_count ? ` · 待覆核 ${m.review_count}` : ''), /*#__PURE__*/React.createElement("span", {
-    className: "cat-caret",
-    "aria-hidden": "true"
-  }, open ? '▾' : '▸')), open && /*#__PURE__*/React.createElement("div", {
-    className: "cat-body"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "toolbar"
-  }, /*#__PURE__*/React.createElement("label", {
-    className: "small muted"
-  }, "排序："), /*#__PURE__*/React.createElement("select", {
-    value: sort,
-    onChange: e => setSort(e.target.value),
-    "aria-label": "Sub Cat 排序"
-  }, /*#__PURE__*/React.createElement("option", {
-    value: "order"
-  }, "核准順序"), /*#__PURE__*/React.createElement("option", {
-    value: "count_desc"
-  }, "SKU 數（多→少）"), /*#__PURE__*/React.createElement("option", {
-    value: "count_asc"
-  }, "SKU 數（少→多）"), /*#__PURE__*/React.createElement("option", {
-    value: "name"
-  }, "名稱 A–Z"))), loading ? /*#__PURE__*/React.createElement(Loading, null) : err ? /*#__PURE__*/React.createElement(Err, {
-    m: err
-  }) : data && data.sub_cats && data.sub_cats.length ? /*#__PURE__*/React.createElement("div", {
-    className: "sub-list"
-  }, data.sub_cats.map(s => /*#__PURE__*/React.createElement("button", {
-    key: s.code,
-    className: "sub-row",
-    onClick: () => onPickSub(s.code)
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "sub-name"
-  }, s.name), /*#__PURE__*/React.createElement("span", {
-    className: "small muted"
-  }, s.sku_count, " SKUs", s.missing_price_count ? ` · 缺價 ${s.missing_price_count}` : '', s.missing_stock_count ? ` · 缺庫存 ${s.missing_stock_count}` : '', s.review_count ? ` · 待覆核 ${s.review_count}` : '')))) : /*#__PURE__*/React.createElement("div", {
-    className: "empty"
-  }, "No Sub Cat configured（分類設定問題）")));
+  return /*#__PURE__*/React.createElement(AllSkusView, null);
 }
 
-// Product Token list for one Sub Cat: drill-down level between Sub Cat and SKUs.
-function SubCatTokens({
-  code,
-  onBack,
-  onBackAll
-}) {
-  const {
-    data,
-    err,
-    loading
-  } = useData('/api/sub-categories/' + code + '/tokens', [code]);
-  const [pick, setPick] = useState(null); // {id,name} | {all:true}
-  if (pick) return /*#__PURE__*/React.createElement(SubCatSkus, {
-    code: code,
-    tokenId: pick.all ? null : pick.id,
-    tokenName: pick.all ? null : pick.name,
-    onBack: () => setPick(null),
-    onBackAll: onBackAll
-  });
-  return /*#__PURE__*/React.createElement(Page, {
-    title: "分類瀏覽",
-    sub: ""
-  }, /*#__PURE__*/React.createElement("nav", {
-    className: "crumb small",
-    "aria-label": "breadcrumb"
-  }, /*#__PURE__*/React.createElement("button", {
-    className: "linklike",
-    onClick: onBackAll
-  }, "分類瀏覽"), data && /*#__PURE__*/React.createElement(React.Fragment, null, " ", /*#__PURE__*/React.createElement("span", {
-    className: "muted"
-  }, "›"), " ", /*#__PURE__*/React.createElement("button", {
-    className: "linklike",
-    onClick: onBack
-  }, data.main_cat.name), /*#__PURE__*/React.createElement("span", {
-    className: "muted"
-  }, "›"), " ", /*#__PURE__*/React.createElement("b", null, data.sub_cat.name))), loading ? /*#__PURE__*/React.createElement(Loading, null) : err ? /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Err, {
-    m: err
-  })) : !data || !data.tokens || !data.tokens.length ? /*#__PURE__*/React.createElement("div", {
-    className: "empty"
-  }, "此 Sub Cat 暫時沒有產品符號") : /*#__PURE__*/React.createElement("div", {
-    className: "panel"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "toolbar",
-    style: {
-      marginBottom: 10
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "small muted"
-  }, data.tokens.length, " 個產品符號 · 點擊查看其 SKU，或"), /*#__PURE__*/React.createElement("button", {
-    className: "ghost",
-    onClick: () => setPick({
-      all: true
-    })
-  }, "查看所有 SKU →")), /*#__PURE__*/React.createElement("div", {
-    className: "sub-list"
-  }, data.tokens.map(t => /*#__PURE__*/React.createElement("button", {
-    key: t.id,
-    className: "sub-row",
-    onClick: () => setPick({
-      id: t.id,
-      name: t.name
-    })
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "sub-name"
-  }, t.name), /*#__PURE__*/React.createElement("span", {
-    className: "small muted"
-  }, t.sku_count, " SKUs", t.in_stock_count ? ` · 有貨 ${t.in_stock_count}` : '', t.low_stock_count ? ` · 少貨 ${t.low_stock_count}` : '', t.out_of_stock_count ? ` · 缺貨 ${t.out_of_stock_count}` : ''))))));
-}
-
-// SKU list for one Sub Cat: server-side pagination + filters + search.
-function SubCatSkus({
-  code,
-  tokenId,
-  tokenName,
-  onBack,
-  onBackAll
-}) {
+// Direct all-SKU browser for 分類瀏覽: server-side pagination + the same filters
+// you'd see after pressing into a product token (keyword / SKU id / brand /
+// visibility / stock / review / 缺價 / 缺庫存).
+function AllSkusView() {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(30);
   const [f, setF] = useState({
     brand: '',
-    product_token: '',
     visibility: '',
     stock_status: '',
     review_status: '',
@@ -1752,7 +1581,6 @@ function SubCatSkus({
     page: String(page),
     page_size: String(pageSize)
   });
-  if (tokenId) qs.set('token_id', String(tokenId));
   Object.entries(f).forEach(([k, v]) => {
     if (v) qs.set(k, v);
   });
@@ -1760,10 +1588,10 @@ function SubCatSkus({
     data,
     err,
     loading
-  } = useData('/api/sub-categories/' + code + '/skus?' + qs.toString(), [code, tokenId, page, JSON.stringify(f)]);
+  } = useData('/api/skus/all?' + qs.toString(), [page, JSON.stringify(f)]);
   const {
     data: brands
-  } = useData('/api/sub-categories/' + code + '/brands', [code]);
+  } = useData('/api/skus/all/brands');
   const set = (k, v) => {
     setPage(1);
     setF(prev => ({
@@ -1775,7 +1603,6 @@ function SubCatSkus({
     setPage(1);
     setF({
       brand: '',
-      product_token: '',
       visibility: '',
       stock_status: '',
       review_status: '',
@@ -1786,42 +1613,15 @@ function SubCatSkus({
     });
   };
   const pg = data && data.pagination;
+  const hasFilter = Object.values(f).some(v => v);
   return /*#__PURE__*/React.createElement(Page, {
     title: "分類瀏覽",
-    sub: ""
-  }, /*#__PURE__*/React.createElement("nav", {
-    className: "crumb small",
-    "aria-label": "breadcrumb"
-  }, /*#__PURE__*/React.createElement("button", {
-    className: "linklike",
-    onClick: onBackAll
-  }, "分類瀏覽"), data && /*#__PURE__*/React.createElement(React.Fragment, null, " ", /*#__PURE__*/React.createElement("span", {
-    className: "muted"
-  }, "›"), " ", /*#__PURE__*/React.createElement("button", {
-    className: "linklike",
-    onClick: onBackAll
-  }, data.main_cat.name), /*#__PURE__*/React.createElement("span", {
-    className: "muted"
-  }, "›"), " ", /*#__PURE__*/React.createElement("button", {
-    className: "linklike",
-    onClick: onBack
-  }, data.sub_cat.name), tokenName && /*#__PURE__*/React.createElement(React.Fragment, null, " ", /*#__PURE__*/React.createElement("span", {
-    className: "muted"
-  }, "›"), " ", /*#__PURE__*/React.createElement("b", null, tokenName)), !tokenName && /*#__PURE__*/React.createElement(React.Fragment, null, " ", /*#__PURE__*/React.createElement("span", {
-    className: "muted"
-  }, "›"), " ", /*#__PURE__*/React.createElement("b", null, "所有 SKU")))), /*#__PURE__*/React.createElement("div", {
+    sub: "直接瀏覽全部 SKU。可用關鍵字 / SKU ID / 品牌 / 顯示 / 庫存 / 覆核 篩選。"
+  }, /*#__PURE__*/React.createElement(Err, {
+    m: err
+  }), /*#__PURE__*/React.createElement("div", {
     className: "panel"
-  }, tokenName && /*#__PURE__*/React.createElement("div", {
-    className: "toolbar",
-    style: {
-      marginBottom: 8
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "tag"
-  }, "產品符號：", tokenName), /*#__PURE__*/React.createElement("button", {
-    className: "linklike small",
-    onClick: onBack
-  }, "← 返回產品符號")), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("div", {
     className: "toolbar filters"
   }, /*#__PURE__*/React.createElement("input", {
     placeholder: "關鍵字（名稱/SKU/品牌/規格）",
@@ -1845,7 +1645,7 @@ function SubCatSkus({
   }, b))), /*#__PURE__*/React.createElement("select", {
     value: f.visibility,
     onChange: e => set('visibility', e.target.value),
-    "aria-label": "顯示狀態"
+    "aria-label": "顯示/隱藏"
   }, /*#__PURE__*/React.createElement("option", {
     value: ""
   }, "顯示/隱藏"), /*#__PURE__*/React.createElement("option", {
@@ -1871,7 +1671,7 @@ function SubCatSkus({
   }, "離線")), /*#__PURE__*/React.createElement("select", {
     value: f.review_status,
     onChange: e => set('review_status', e.target.value),
-    "aria-label": "覆核狀態"
+    "aria-label": "覆核"
   }, /*#__PURE__*/React.createElement("option", {
     value: ""
   }, "全部覆核"), /*#__PURE__*/React.createElement("option", {
@@ -1899,7 +1699,7 @@ function SubCatSkus({
     m: err
   })) : !data || !data.rows.length ? /*#__PURE__*/React.createElement("div", {
     className: "empty"
-  }, Object.values(f).some(v => v) ? '沒有符合條件的 SKU' : '此 Sub Cat 暫時沒有 SKU', " ", Object.values(f).some(v => v) && /*#__PURE__*/React.createElement("button", {
+  }, hasFilter ? '沒有符合條件的 SKU' : '暫時沒有 SKU', " ", hasFilter && /*#__PURE__*/React.createElement("button", {
     className: "ghost",
     onClick: reset
   }, "清除篩選")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {

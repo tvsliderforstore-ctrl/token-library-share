@@ -76,6 +76,9 @@ async function createApp(dbFile) {
     const out = repo.Categories.skusInSub(db, p.code, q);
     return out ? sendJson(res, 200, out) : sendError(res, 404, 'Sub Cat not found');
   });
+  // 分類瀏覽 direct view: all SKUs (no sub-cat), same filters as the sub-cat SKU list.
+  r.get('/api/skus/all', (req, res, p, q) => sendJson(res, 200, repo.Categories.skusInSub(db, 'ALL', q)));
+  r.get('/api/skus/all/brands', (req, res) => sendJson(res, 200, repo.Categories.brandsInSub(db, 'ALL') || []));
   r.get('/api/categories/overview', (req, res) => sendJson(res, 200, repo.Categories.subcatOverview(db)));
   r.get('/api/stat-drill/:kind', (req, res, p, q) => {
     const out = repo.statDrill(db, p.kind, { limit: q.limit, offset: q.offset });

@@ -693,6 +693,91 @@ const Categories = {
     },
   },
 
+  // Generic Main Cat → Sub Cat → 產品符號 → SKU tree drill for the 總覽 press-in cards.
+  // Supports three drill families:
+  //   stock:      {fam:'stock', status:'IN_STOCK'|'LOW_STOCK'|'OUT_OF_STOCK'|'OFFLINE'}
+  //   visibility: {fam:'vis', state:'visible'|'invisible'}
+  //   cheapest:   {fam:'cheap', bucket:'is-real'|'not-real'|'substituted'}
+  TreeDrill: {
+    _cond(sel) {
+      if (sel.fam === 'stock') {
+        if (sel.status === 'OUT_OF_STOCK') return "ls.stock_status='OUT_OF_STOCK'";
+        if (sel.status === 'LOW_STOCK') return "ls.stock_status='LOW_STOCK'";
+        if (sel.status === 'OFFLINE') return "(ls.stock_status IS NOT NULL AND ls.stock_status NOT IN ('IN_STOCK','LOW_STOCK','OUT_OF_STOCK'))";
+        return "ls.stock_status='IN_STOCK'";
+      }
+      if (sel.fam === 'vis') return sel.state === 'invisible' ? "soc.current_is_invisible=1" : "COALESCE(soc.current_is_invisible,0)=0";
+      return '1=1'; // cheap buckets filtered in JS at SKU level
+    },
+    _socJoin(sel) { return sel.fam === 'vis' ? 'JOIN sku_operational_current soc ON soc.sku_id = s.external_sku_id' : 'LEFT JOIN sku_operational_current soc ON soc.sku_id = s.external_sku_id'; },
+    main(db, sel) {
+      const cond = this._cond(sel); const soc = this._socJoin(sel);
+      return db.all(`
+        SELECT g.group_code AS code, g.name_zh AS name,
+          (SELECT COUNT(*) FROM sku_records s ${soc} ${_latestStock} WHERE s.large_group_id=g.id AND s.active=1 AND ${cond}) AS cnt
+        FROM large_groups g WHERE g.active=1
+          AND (SELECT COUNT(*) FROM sku_records s ${soc} ${_latestStock} WHERE s.large_group_id=g.id AND s.active=1 AND ${cond}) > 0
+        ORDER BY g.display_order`);
+    },
+    sub(db, sel, groupCode) {
+      const cond = this._cond(sel); const soc = this._socJoin(sel);
+      const g = db.get('SELECT id FROM large_groups WHERE group_code=?', [groupCode]);
+      if (!g) return null;
+      return db.all(`
+        SELECT sc.sub_cat_code AS code, sc.name_zh AS name,
+          (SELECT COUNT(*) FROM sku_records s ${soc} ${_latestStock} WHERE s.sub_category_id=sc.id AND s.active=1 AND ${cond}) AS cnt
+        FROM sub_categories sc WHERE sc.large_group_id=? AND sc.active=1
+          AND (SELECT COUNT(*) FROM sku_records s ${soc} ${_latestStock} WHERE s.sub_category_id=sc.id AND s.active=1 AND ${cond}) > 0
+        ORDER BY sc.display_order`, [g.id]);
+    },
+    tokens(db, sel, subCatCode) {
+      const cond = this._cond(sel); const soc = this._socJoin(sel);
+      const sc = db.get('SELECT id FROM sub_categories WHERE sub_cat_code=?', [subCatCode]);
+      if (!sc) return null;
+      return db.all(`
+        SELECT t.id, t.token_code AS code, t.name_zh AS name,
+          (SELECT COUNT(*) FROM sku_records s ${soc} ${_latestStock} WHERE s.product_token_id=t.id AND s.active=1 AND ${cond}) AS cnt
+        FROM product_tokens t WHERE t.sub_category_id=? AND t.active=1
+          AND (SELECT COUNT(*) FROM sku_records s ${soc} ${_latestStock} WHERE s.product_token_id=t.id AND s.active=1 AND ${cond}) > 0
+        ORDER BY t.priority DESC, t.name_zh`, [sc.id]);
+    },
+    skus(db, sel, tokenId) {
+      const cond = this._cond(sel); const soc = this._socJoin(sel);
+      const rows = db.all(`
+        SELECT s.id, s.external_sku_id AS sku_id, s.raw_sku_name AS product_name,
+               s.product_key_id, k.display_key, k.display_pack_format AS packing_spec,
+               b.display_name AS brand, lp.effective_price_minor, ls.stock_status
+        FROM sku_records s
+        LEFT JOIN product_keys k ON k.id=s.product_key_id
+        LEFT JOIN brands b ON b.id=k.brand_id
+        ${soc} ${_latestPrice} ${_latestStock}
+        WHERE s.product_token_id=? AND s.active=1 AND ${cond}
+        ORDER BY k.display_key, lp.effective_price_minor`, [tokenId]);
+      const keyIds = [...new Set(rows.map((r) => r.product_key_id).filter((x) => x != null))];
+      const rankMap = keyRankMap(db, keyIds);
+      let out = rows.map((r) => {
+        const rk = rankMap[r.id] || {};
+        return {
+          sku_id: r.sku_id, product_name: r.product_name, display_key: r.display_key, packing_spec: r.packing_spec,
+          brand: r.brand, stock_status: r.stock_status,
+          discount_price: r.effective_price_minor != null ? r.effective_price_minor / 100 : null,
+          cheapest_rank: rk.cheapest_rank, cheapest_group_size: rk.cheapest_group_size,
+          is_cheapest: !!rk.is_cheapest, is_real_top1: !!rk.is_real_top1, real_top1_offset: rk.real_top1_offset,
+        };
+      });
+      // cheapest buckets: filter to representative SKU per key
+      if (sel.fam === 'cheap') {
+        out = out.filter((r) => {
+          if (sel.bucket === 'is-real') return r.is_cheapest && r.is_real_top1;
+          if (sel.bucket === 'not-real') return r.is_cheapest && !r.is_real_top1;
+          if (sel.bucket === 'substituted') return r.is_real_top1 && (r.real_top1_offset || 0) > 0;
+          return false;
+        });
+      }
+      return out;
+    },
+  },
+
   // Taxonomy editor: update a Sub Cat (name/description/order/active).
   updateSub(db, subCatCode, fields, reviewer) {
     const sc = this.getSub(db, subCatCode);

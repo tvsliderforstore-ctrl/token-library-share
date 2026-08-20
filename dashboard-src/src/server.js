@@ -274,6 +274,22 @@ async function createApp(dbFile) {
   });
   r.get('/api/stock-drill/:status/token/:id', (req, res, p) => sendJson(res, 200, repo.Categories.StockDrill.skus(db, drillStatus(p.status), p.id)));
 
+  // Generic tree drill: /api/tree-drill/:fam/:a[/:b[/:c]]
+  //   fam=stock    a=status(IN_STOCK|LOW_STOCK|OUT_OF_STOCK|OFFLINE)
+  //   fam=vis      a=state(visible|invisible)
+  //   fam=cheap    a=bucket(is-real|not-real|substituted)
+  // Levels: /main, /main/:groupCode, /sub/:subCatCode, /token/:tokenId
+  const parseSel = (fam, a) => {
+    if (fam === 'stock') { const u = String(a).toUpperCase(); return { fam, status: ['OUT_OF_STOCK','LOW_STOCK','OFFLINE'].includes(u) ? u : 'IN_STOCK' }; }
+    if (fam === 'vis') return { fam, state: a === 'invisible' ? 'invisible' : 'visible' };
+    if (fam === 'cheap') return { fam, bucket: a };
+    return null;
+  };
+  r.get('/api/tree-drill/:fam/:a/main', (req, res, p) => { const s = parseSel(p.fam, p.a); if (!s) return sendError(res, 400, 'bad drill'); sendJson(res, 200, repo.Categories.TreeDrill.main(db, s)); });
+  r.get('/api/tree-drill/:fam/:a/main/:code', (req, res, p) => { const s = parseSel(p.fam, p.a); if (!s) return sendError(res, 400, 'bad drill'); const out = repo.Categories.TreeDrill.sub(db, s, p.code); return out ? sendJson(res, 200, out) : sendError(res, 404, 'not found'); });
+  r.get('/api/tree-drill/:fam/:a/sub/:code', (req, res, p) => { const s = parseSel(p.fam, p.a); if (!s) return sendError(res, 400, 'bad drill'); const out = repo.Categories.TreeDrill.tokens(db, s, p.code); return out ? sendJson(res, 200, out) : sendError(res, 404, 'not found'); });
+  r.get('/api/tree-drill/:fam/:a/token/:id', (req, res, p) => { const s = parseSel(p.fam, p.a); if (!s) return sendError(res, 400, 'bad drill'); sendJson(res, 200, repo.Categories.TreeDrill.skus(db, s, p.id)); });
+
   function presentPrice(row, prev) {
     if (!row) return { status: 'MISSING', freshness: 'MISSING' };
     return {

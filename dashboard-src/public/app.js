@@ -37,8 +37,8 @@ function Page({title, sub, subRight, children}){ return <div><div style={{displa
 const Loading = ()=> <div className="empty">載入中…</div>;
 const Err = ({m})=> m? <div className="err">錯誤：{m}</div> : null;
 
-// ---------- Stock drill-down (總覽 有貨/缺貨) ----------
-// status -> Main Cat -> Sub Cat -> Product Token -> SKU (rank-1 = cheapest in its Product Key).
+// ---------- Generic tree drill (總覽 press-in cards) ----------
+// sel -> /api/tree-drill/:fam/:a/...  Main Cat -> Sub Cat -> 產品符號 -> SKU.
 function DrillRows({url, renderRow, deps}){
   const {data,err,loading}=useData(url, deps||[url]);
   if(!url) return null;
@@ -57,49 +57,48 @@ function DrillRow({name, cnt, open, onToggle, children}){
     {open && <div className="drill-children">{children}</div>}
   </div>;
 }
-function StockDrill({status}){
-  const [openMain,setOpenMain]=useState(null);   // main code
-  const [openSub,setOpenSub]=useState(null);     // sub code
-  const [openTok,setOpenTok]=useState(null);     // token id
-  useEffect(()=>{ setOpenMain(null); setOpenSub(null); setOpenTok(null); },[status]);
-  const isOOS = status==='OUT_OF_STOCK';
-  const label = status==='OUT_OF_STOCK'?'缺貨': status==='LOW_STOCK'?'少貨':'有貨';
+// sel = {fam:'stock',status} | {fam:'vis',state} | {fam:'cheap',bucket}
+function TreeDrillPanel({sel, title, onClose}){
+  const [openMain,setOpenMain]=useState(null);
+  const [openSub,setOpenSub]=useState(null);
+  const [openTok,setOpenTok]=useState(null);
+  const base = '/api/tree-drill/'+sel.fam+'/'+(sel.status||sel.state||sel.bucket);
+  useEffect(()=>{ setOpenMain(null); setOpenSub(null); setOpenTok(null); },[base]);
   return <div className="panel" style={{marginTop:14}}>
-    <h3>{label} 明細（Main Cat → Sub Cat → 產品符號 → SKU）</h3>
-    <DrillRows url={'/api/stock-drill/'+status+'/main'} deps={[status]} renderRow={m=>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+      <h3>{title} 明細（Main Cat → Sub Cat → 產品符號 → SKU）</h3>
+      <button className="ghost small" onClick={onClose}>收合 ✕</button>
+    </div>
+    <DrillRows url={base+'/main'} deps={[base]} renderRow={m=>
       <DrillRow key={m.code} name={m.name} cnt={m.cnt} open={openMain===m.code}
         onToggle={()=>{setOpenMain(openMain===m.code?null:m.code); setOpenSub(null); setOpenTok(null);}}>
-        {openMain===m.code && <DrillRows url={'/api/stock-drill/'+status+'/main/'+m.code} deps={[status,m.code]} renderRow={s=>
+        {openMain===m.code && <DrillRows url={base+'/main/'+m.code} deps={[base,m.code]} renderRow={s=>
           <DrillRow key={s.code} name={s.name} cnt={s.cnt} open={openSub===s.code}
             onToggle={()=>{setOpenSub(openSub===s.code?null:s.code); setOpenTok(null);}}>
-            {openSub===s.code && <DrillRows url={'/api/stock-drill/'+status+'/sub/'+s.code} deps={[status,s.code]} renderRow={t=>
+            {openSub===s.code && <DrillRows url={base+'/sub/'+s.code} deps={[base,s.code]} renderRow={t=>
               <DrillRow key={t.id} name={t.name} cnt={t.cnt} open={openTok===t.id}
                 onToggle={()=>setOpenTok(openTok===t.id?null:t.id)}>
-                {openTok===t.id && <DrillSkus status={status} tokenId={t.id}/>}
-              </DrillRow>}/>
-            }
-          </DrillRow>}/>
-        }
+                {openTok===t.id && <TreeSkus base={base} tokenId={t.id}/>}
+              </DrillRow>}/>}
+          </DrillRow>}/>}
       </DrillRow>}/>
   </div>;
 }
-function DrillSkus({status, tokenId}){
-  const {data,err,loading}=useData('/api/stock-drill/'+status+'/token/'+tokenId, [status,tokenId]);
+function TreeSkus({base, tokenId}){
+  const {data,err,loading}=useData(base+'/token/'+tokenId, [base,tokenId]);
   if(loading) return <div className="empty small">載入中…</div>;
   if(err) return <Err m={err}/>;
   if(!data||!data.length) return <div className="empty small">無 SKU</div>;
-  const showRank = status==='OUT_OF_STOCK' || status==='LOW_STOCK';
-  const rankHdr = status==='OUT_OF_STOCK' ? '缺貨且 Key 內最平（Rank 1）' : 'Key 內最平（Rank 1）';
   return <div className="table-wrap"><table>
-    <thead><tr><th>來源</th><th>SKU</th><th>產品名稱</th><th>Product Key</th><th style={{textAlign:'right'}}>售價</th>{showRank && <th>{rankHdr}</th>}<th>有貨 Top1</th></tr></thead>
-    <tbody>{data.map(s=> <tr key={s.id}>
+    <thead><tr><th>來源</th><th>SKU</th><th>產品名稱</th><th>Product Key</th><th style={{textAlign:'right'}}>售價</th><th>庫存</th><th>Key 排名</th></tr></thead>
+    <tbody>{data.map(s=> <tr key={s.sku_id}>
       <td><ChanBadge sku={s.sku_id}/></td>
       <td className="mono small">{s.sku_id}</td>
       <td className="small">{s.product_name}</td>
       <td className="small muted">{s.display_key||'—'}</td>
       <td style={{textAlign:'right'}}>{fmt$(s.discount_price)}</td>
-      {showRank && <td>{s.is_cheapest? <span className="badge b-red">是 · Rank 1 / {s.key_group_size}</span> : <span className="badge b-grey">否 · Rank {s.key_rank} / {s.key_group_size}</span>}</td>}
-      <td>{s.is_real_top1? (s.real_top1_offset>0? <span className="badge b-amber">有貨Top1 ↑{s.real_top1_offset}</span> : <span className="badge b-green">有貨Top1</span>) : <span className="muted small">—</span>}</td>
+      <td><StockBadge2 s={s.stock_status}/></td>
+      <td><RankBadge s={s}/></td>
     </tr>)}</tbody></table></div>;
 }
 // H = HKTVmall 自家 (sku starts with H); M = merchant / 非 HKTVmall.
@@ -139,51 +138,14 @@ function CheapestRealPanel(){
       <button className="card card-btn" onClick={()=>setDrill(drill==='substituted'?null:'substituted')}><div className="num">{data.real_substituted}</div><div className="lbl">有貨Top1係次平/更後 →</div></button>
       <div className="card"><div className="num">{pct}%</div><div className="lbl">最平有貨比例（共 {data.cheapest_total} Keys）</div></div>
     </div>
-    {drill && <CheapestRealDrill kind={drill} key={drill} onClose={()=>setDrill(null)}/>}
+    {drill && <TreeDrillPanel sel={{fam:'cheap',bucket:drill}} key={'cheap'+drill} title={CR_DRILL_TITLE[drill]||drill} onClose={()=>setDrill(null)}/>}
   </>;
 }
-
-// Drill table for one 最平/有貨 Top1 bucket. One representative SKU per Product Key.
-const CR_DRILL_META = {
-  'is-real':     {title:'最平＝有貨Top1（最平嗰個有貨）', note:'每個 Key 最平嗰個 SKU 而家有貨，所以佢就係有貨 Top1。'},
-  'not-real':    {title:'最平缺貨（非有貨Top1）', note:'每個 Key 最平嗰個 SKU 而家缺貨；下面列出呢個最平（缺貨）嘅 SKU。'},
-  'substituted': {title:'有貨Top1係次平/更後', note:'最平嗰個缺貨，所以有貨 Top1 落到次平（或更後）。下面列出而家嘅有貨 Top1（唔係最平嗰個）。'},
+const CR_DRILL_TITLE = {
+  'is-real':'最平＝有貨Top1（最平嗰個有貨）',
+  'not-real':'最平缺貨（非有貨Top1）',
+  'substituted':'有貨Top1係次平/更後',
 };
-function CheapestRealDrill({kind, onClose}){
-  const meta = CR_DRILL_META[kind] || {title:kind, note:''};
-  const [page,setPage]=useState(1);
-  const pageSize=50;
-  useEffect(()=>setPage(1),[kind]);
-  const {data,err,loading}=useData('/api/cheapest-real-drill/'+kind+'?limit='+pageSize+'&offset='+((page-1)*pageSize),[kind,page]);
-  const total = data?data.total:0;
-  const pg = data? { page, page_size:pageSize, total_rows:total, total_pages:Math.max(1,Math.ceil(total/pageSize)) } : null;
-  return <div className="panel" style={{marginTop:14}}>
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-      <h3>{meta.title} 明細</h3>
-      <button className="ghost small" onClick={onClose}>收合 ✕</button>
-    </div>
-    <div className="small muted" style={{marginBottom:8}}>{meta.note}</div>
-    {loading? <Loading/> : err? <Err m={err}/> :
-      !data||!data.rows||!data.rows.length? <div className="empty small">無資料</div> :
-      <>
-      <div className="table-wrap"><table className="sku-table">
-        <thead><tr><th>SKU ID</th><th>品牌</th><th>產品名稱</th><th>Product Key</th><th>Main Cat</th><th>Sub Cat</th><th style={{textAlign:'right'}}>折後價</th><th>庫存</th><th>Key 排名</th></tr></thead>
-        <tbody>{data.rows.map(s=> <tr key={s.sku_id}>
-          <td className="mono small">{s.sku_id}</td>
-          <td className="small">{s.brand||'—'}</td>
-          <td className="small">{s.product_name}</td>
-          <td className="small muted">{s.display_key||'—'}</td>
-          <td className="small">{s.main_cat||'—'}</td>
-          <td className="small">{s.sub_cat||'—'}</td>
-          <td style={{textAlign:'right'}} className="small">{s.discount_price!=null?('$'+s.discount_price):'—'}</td>
-          <td><StockBadge2 s={s.stock_status}/></td>
-          <td><RankBadge s={s}/></td>
-        </tr>)}</tbody>
-      </table></div>
-      {pg && pg.total_pages>1 && <Pagination pg={pg} onPage={setPage}/>}
-      </>}
-  </div>;
-}
 
 function Overview(){
   const {data,err,loading}=useData('/api/overview');
@@ -193,7 +155,7 @@ function Overview(){
   const [statDrill,setStatDrill]=useState(null);     // top-card drill key | null
   if(loading) return <Loading/>;
   const cards = [
-    ['Main Cat', data.large_groups, 'large-groups'],['SKUs', data.skus, 'skus'],
+    ['Main Cat', data.large_groups, 'large-groups'],
   ];
   const freshness = <>
     最後線上狀態更新：{fmtTime(data.last_visibility_refresh)}<br/>
@@ -202,32 +164,27 @@ function Overview(){
   </>;
   return <Page title="總覽" sub="產品庫整體狀況" subRight={freshness}>
     <Err m={err}/>
-    <div className="cards">{cards.map(([l,v,k])=> <button className="card card-btn" key={l} onClick={()=>setStatDrill(statDrill===k?null:k)}><div className="num">{v??0}</div><div className="lbl">{l} →</div></button>)}</div>
+    <div className="cards">
+      {cards.map(([l,v,k])=> <button className="card card-btn" key={l} onClick={()=>setStatDrill(statDrill===k?null:k)}><div className="num">{v??0}</div><div className="lbl">{l} →</div></button>)}
+      <div className="card"><div className="num">{data.skus??0}</div><div className="lbl">SKUs</div></div>
+    </div>
     {statDrill && <StatDrill kind={statDrill} key={statDrill} onClose={()=>setStatDrill(null)}/>}
     <div className="panel"><h3>價格與庫存總覽</h3>
       <div className="small muted" style={{marginBottom:8}}>SKU 層級的價格與庫存觀測。摘要按 Key / 符號 / Main Cat 計算，觀測永在 SKU 層。</div>
       <PriceStockSummary onPick={setStockDrill}/>
     </div>
-    {stockDrill && <StockDrill status={stockDrill} key={stockDrill}/>}
+    {stockDrill && <TreeDrillPanel sel={{fam:'stock',status:stockDrill}} key={'stock'+stockDrill} title={({IN_STOCK:'有貨',LOW_STOCK:'少貨',OUT_OF_STOCK:'缺貨',OFFLINE:'離線'})[stockDrill]||stockDrill} onClose={()=>setStockDrill(null)}/>}
     <div className="panel"><h3>可見 / 隱藏 總覽</h3>
       <div className="small muted" style={{marginBottom:8}}>根據 Tableau is_invisible。按下可見 / 隱藏 查看產品明細。</div>
       <div className="cards">
         <button className="card card-btn" onClick={()=>setVisDrill(visDrill==='visible'?null:'visible')}><div className="num" style={{color:'var(--green,#16a34a)'}}>{data.online_count??0}</div><div className="lbl">可見（線上）→</div></button>
         <button className="card card-btn" onClick={()=>setVisDrill(visDrill==='invisible'?null:'invisible')}><div className="num" style={{color:'var(--muted,#6b7280)'}}>{data.offline_count??0}</div><div className="lbl">隱藏（離線）→</div></button>
-        <div className="card"><div className="num">{data.visibility_unknown_count??0}</div><div className="lbl">未知</div></div>
       </div>
     </div>
-    {visDrill && <VisDrill state={visDrill} key={visDrill} onClose={()=>setVisDrill(null)}/>}
+    {visDrill && <TreeDrillPanel sel={{fam:'vis',state:visDrill}} key={'vis'+visDrill} title={visDrill==='invisible'?'隱藏（離線）':'可見（線上）'} onClose={()=>setVisDrill(null)}/>}
     <div className="panel"><h3>最平 / 有貨 Top1 總覽</h3>
       <div className="small muted" style={{marginBottom:8}}>每個 Product Key 的「最平」第 1 名，而家有幾多個同時係「有貨 Top1」（最平嗰個有貨）。最平缺貨時，有貨 Top1 會落到次平、第三平…</div>
       <CheapestRealPanel/>
-    </div>
-    <div className="grid2">
-      <div className="panel"><h3>最近修正</h3>
-        {data.recent_corrections && data.recent_corrections.length? <table><tbody>
-          {data.recent_corrections.slice(0,8).map(c=> <tr key={c.id}><td className="small">{c.entity_type}</td><td className="small">{c.action}</td><td className="small muted">{fmtTime(c.created_at)}</td></tr>)}
-        </tbody></table> : <div className="empty small">暫無修正記錄</div>}
-      </div>
     </div>
     {cat && <div className="panel" style={{marginTop:14}}><h3>分類概況（Main Cat / Sub Cat）</h3>
       <div className="cards" style={{marginBottom:12}}>
@@ -242,40 +199,6 @@ function Overview(){
         <tbody>{(cat.sku_count_by_cat||[]).map((r,i)=> <tr key={i}><td className="small">{r.main_cat}</td><td className="small">{r.sub_cat}</td><td style={{textAlign:'right'}}>{r.cnt}</td></tr>)}</tbody></table>
     </div>}
   </Page>;
-}
-
-// Visibility drill panel: lists SKUs that are 可見 (online) or 隱藏 (offline).
-function VisDrill({state, onClose}){
-  const [page,setPage]=useState(1);
-  const pageSize=50;
-  const {data,err,loading}=useData('/api/visibility-drill/'+state+'?limit='+pageSize+'&offset='+((page-1)*pageSize),[state,page]);
-  const title = state==='invisible' ? '隱藏（離線）產品' : '可見（線上）產品';
-  const pg = data? { page, page_size:pageSize, total_rows:data.total, total_pages:Math.max(1,Math.ceil(data.total/pageSize)) } : null;
-  return <div className="panel" style={{marginTop:14}}>
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-      <h3 style={{margin:0}}>{title} 明細</h3>
-      <button className="ghost small" onClick={onClose}>收合 ✕</button>
-    </div>
-    {loading? <Loading/> : err? <Err m={err}/> :
-      !data||!data.rows.length? <div className="empty small">無資料</div> :
-      <>
-      <div className="table-wrap"><table className="sku-table">
-        <thead><tr><th>SKU ID</th><th>品牌</th><th>產品名稱</th><th>規格</th><th>Main Cat</th><th>Sub Cat</th><th style={{textAlign:'right'}}>折後價</th><th>Key 排名</th><th>顯示狀態</th></tr></thead>
-        <tbody>{data.rows.map(s=> <tr key={s.id}>
-          <td className="mono small">{s.sku_id}</td>
-          <td className="small">{s.brand||'—'}</td>
-          <td className="small">{s.product_name}</td>
-          <td className="small muted">{s.packing_spec||'—'}</td>
-          <td className="small">{s.main_cat||'—'}</td>
-          <td className="small">{s.sub_cat||'—'}</td>
-          <td style={{textAlign:'right'}} className="small">{s.discount_price!=null?('$'+s.discount_price):'—'}</td>
-          <td><RankBadge s={s}/></td>
-          <td><VisBadge v={s.is_invisible}/></td>
-        </tr>)}</tbody>
-      </table></div>
-      {pg && pg.total_pages>1 && <Pagination pg={pg} onPage={setPage}/>}
-      </>}
-  </div>;
 }
 
 // Stat drill panel: shows what each top-card count includes.
@@ -530,10 +453,7 @@ function PriceStockSummary({onPick}){
     <Card status="IN_STOCK" color="var(--green)" val={data.in_stock} lbl="有貨"/>
     <Card status="OUT_OF_STOCK" color="var(--red)" val={data.out_of_stock} lbl="缺貨"/>
     <Card status="LOW_STOCK" color="var(--amber)" val={data.low_stock} lbl="少貨"/>
-    <div className="card"><div className="num">{data.unknown_stock}</div><div className="lbl">離線</div></div>
-    <div className="card"><div className="num">{data.active_promotions}</div><div className="lbl">進行中推廣</div></div>
-    <div className="card"><div className="num">{data.missing_price}</div><div className="lbl">缺價格</div></div>
-    <div className="card"><div className="num" style={{color:'var(--amber)'}}>{data.stale_price+data.stale_stock}</div><div className="lbl">過期數據</div></div>
+    <Card status="OFFLINE" color="var(--muted,#6b7280)" val={data.unknown_stock} lbl="離線"/>
   </div>;
 }
 

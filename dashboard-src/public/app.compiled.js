@@ -152,8 +152,8 @@ const Err = ({
   className: "err"
 }, "錯誤：", m) : null;
 
-// ---------- Stock drill-down (總覽 有貨/缺貨) ----------
-// status -> Main Cat -> Sub Cat -> Product Token -> SKU (rank-1 = cheapest in its Product Key).
+// ---------- Generic tree drill (總覽 press-in cards) ----------
+// sel -> /api/tree-drill/:fam/:a/...  Main Cat -> Sub Cat -> 產品符號 -> SKU.
 function DrillRows({
   url,
   renderRow,
@@ -200,27 +200,38 @@ function DrillRow({
     className: "drill-children"
   }, children));
 }
-function StockDrill({
-  status
+// sel = {fam:'stock',status} | {fam:'vis',state} | {fam:'cheap',bucket}
+function TreeDrillPanel({
+  sel,
+  title,
+  onClose
 }) {
-  const [openMain, setOpenMain] = useState(null); // main code
-  const [openSub, setOpenSub] = useState(null); // sub code
-  const [openTok, setOpenTok] = useState(null); // token id
+  const [openMain, setOpenMain] = useState(null);
+  const [openSub, setOpenSub] = useState(null);
+  const [openTok, setOpenTok] = useState(null);
+  const base = '/api/tree-drill/' + sel.fam + '/' + (sel.status || sel.state || sel.bucket);
   useEffect(() => {
     setOpenMain(null);
     setOpenSub(null);
     setOpenTok(null);
-  }, [status]);
-  const isOOS = status === 'OUT_OF_STOCK';
-  const label = status === 'OUT_OF_STOCK' ? '缺貨' : status === 'LOW_STOCK' ? '少貨' : '有貨';
+  }, [base]);
   return /*#__PURE__*/React.createElement("div", {
     className: "panel",
     style: {
       marginTop: 14
     }
-  }, /*#__PURE__*/React.createElement("h3", null, label, " 明細（Main Cat → Sub Cat → 產品符號 → SKU）"), /*#__PURE__*/React.createElement(DrillRows, {
-    url: '/api/stock-drill/' + status + '/main',
-    deps: [status],
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("h3", null, title, " 明細（Main Cat → Sub Cat → 產品符號 → SKU）"), /*#__PURE__*/React.createElement("button", {
+    className: "ghost small",
+    onClick: onClose
+  }, "收合 ✕")), /*#__PURE__*/React.createElement(DrillRows, {
+    url: base + '/main',
+    deps: [base],
     renderRow: m => /*#__PURE__*/React.createElement(DrillRow, {
       key: m.code,
       name: m.name,
@@ -232,8 +243,8 @@ function StockDrill({
         setOpenTok(null);
       }
     }, openMain === m.code && /*#__PURE__*/React.createElement(DrillRows, {
-      url: '/api/stock-drill/' + status + '/main/' + m.code,
-      deps: [status, m.code],
+      url: base + '/main/' + m.code,
+      deps: [base, m.code],
       renderRow: s => /*#__PURE__*/React.createElement(DrillRow, {
         key: s.code,
         name: s.name,
@@ -244,31 +255,31 @@ function StockDrill({
           setOpenTok(null);
         }
       }, openSub === s.code && /*#__PURE__*/React.createElement(DrillRows, {
-        url: '/api/stock-drill/' + status + '/sub/' + s.code,
-        deps: [status, s.code],
+        url: base + '/sub/' + s.code,
+        deps: [base, s.code],
         renderRow: t => /*#__PURE__*/React.createElement(DrillRow, {
           key: t.id,
           name: t.name,
           cnt: t.cnt,
           open: openTok === t.id,
           onToggle: () => setOpenTok(openTok === t.id ? null : t.id)
-        }, openTok === t.id && /*#__PURE__*/React.createElement(DrillSkus, {
-          status: status,
+        }, openTok === t.id && /*#__PURE__*/React.createElement(TreeSkus, {
+          base: base,
           tokenId: t.id
         }))
       }))
     }))
   }));
 }
-function DrillSkus({
-  status,
+function TreeSkus({
+  base,
   tokenId
 }) {
   const {
     data,
     err,
     loading
-  } = useData('/api/stock-drill/' + status + '/token/' + tokenId, [status, tokenId]);
+  } = useData(base + '/token/' + tokenId, [base, tokenId]);
   if (loading) return /*#__PURE__*/React.createElement("div", {
     className: "empty small"
   }, "載入中…");
@@ -278,16 +289,14 @@ function DrillSkus({
   if (!data || !data.length) return /*#__PURE__*/React.createElement("div", {
     className: "empty small"
   }, "無 SKU");
-  const showRank = status === 'OUT_OF_STOCK' || status === 'LOW_STOCK';
-  const rankHdr = status === 'OUT_OF_STOCK' ? '缺貨且 Key 內最平（Rank 1）' : 'Key 內最平（Rank 1）';
   return /*#__PURE__*/React.createElement("div", {
     className: "table-wrap"
   }, /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "來源"), /*#__PURE__*/React.createElement("th", null, "SKU"), /*#__PURE__*/React.createElement("th", null, "產品名稱"), /*#__PURE__*/React.createElement("th", null, "Product Key"), /*#__PURE__*/React.createElement("th", {
     style: {
       textAlign: 'right'
     }
-  }, "售價"), showRank && /*#__PURE__*/React.createElement("th", null, rankHdr), /*#__PURE__*/React.createElement("th", null, "有貨 Top1"))), /*#__PURE__*/React.createElement("tbody", null, data.map(s => /*#__PURE__*/React.createElement("tr", {
-    key: s.id
+  }, "售價"), /*#__PURE__*/React.createElement("th", null, "庫存"), /*#__PURE__*/React.createElement("th", null, "Key 排名"))), /*#__PURE__*/React.createElement("tbody", null, data.map(s => /*#__PURE__*/React.createElement("tr", {
+    key: s.sku_id
   }, /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(ChanBadge, {
     sku: s.sku_id
   })), /*#__PURE__*/React.createElement("td", {
@@ -300,17 +309,11 @@ function DrillSkus({
     style: {
       textAlign: 'right'
     }
-  }, fmt$(s.discount_price)), showRank && /*#__PURE__*/React.createElement("td", null, s.is_cheapest ? /*#__PURE__*/React.createElement("span", {
-    className: "badge b-red"
-  }, "是 · Rank 1 / ", s.key_group_size) : /*#__PURE__*/React.createElement("span", {
-    className: "badge b-grey"
-  }, "否 · Rank ", s.key_rank, " / ", s.key_group_size)), /*#__PURE__*/React.createElement("td", null, s.is_real_top1 ? s.real_top1_offset > 0 ? /*#__PURE__*/React.createElement("span", {
-    className: "badge b-amber"
-  }, "有貨Top1 ↑", s.real_top1_offset) : /*#__PURE__*/React.createElement("span", {
-    className: "badge b-green"
-  }, "有貨Top1") : /*#__PURE__*/React.createElement("span", {
-    className: "muted small"
-  }, "—")))))));
+  }, fmt$(s.discount_price)), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(StockBadge2, {
+    s: s.stock_status
+  })), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(RankBadge, {
+    s: s
+  })))))));
 }
 // H = HKTVmall 自家 (sku starts with H); M = merchant / 非 HKTVmall.
 function ChanBadge({
@@ -411,110 +414,21 @@ function CheapestRealPanel() {
     className: "num"
   }, pct, "%"), /*#__PURE__*/React.createElement("div", {
     className: "lbl"
-  }, "最平有貨比例（共 ", data.cheapest_total, " Keys）"))), drill && /*#__PURE__*/React.createElement(CheapestRealDrill, {
-    kind: drill,
-    key: drill,
+  }, "最平有貨比例（共 ", data.cheapest_total, " Keys）"))), drill && /*#__PURE__*/React.createElement(TreeDrillPanel, {
+    sel: {
+      fam: 'cheap',
+      bucket: drill
+    },
+    key: 'cheap' + drill,
+    title: CR_DRILL_TITLE[drill] || drill,
     onClose: () => setDrill(null)
   }));
 }
-
-// Drill table for one 最平/有貨 Top1 bucket. One representative SKU per Product Key.
-const CR_DRILL_META = {
-  'is-real': {
-    title: '最平＝有貨Top1（最平嗰個有貨）',
-    note: '每個 Key 最平嗰個 SKU 而家有貨，所以佢就係有貨 Top1。'
-  },
-  'not-real': {
-    title: '最平缺貨（非有貨Top1）',
-    note: '每個 Key 最平嗰個 SKU 而家缺貨；下面列出呢個最平（缺貨）嘅 SKU。'
-  },
-  'substituted': {
-    title: '有貨Top1係次平/更後',
-    note: '最平嗰個缺貨，所以有貨 Top1 落到次平（或更後）。下面列出而家嘅有貨 Top1（唔係最平嗰個）。'
-  }
+const CR_DRILL_TITLE = {
+  'is-real': '最平＝有貨Top1（最平嗰個有貨）',
+  'not-real': '最平缺貨（非有貨Top1）',
+  'substituted': '有貨Top1係次平/更後'
 };
-function CheapestRealDrill({
-  kind,
-  onClose
-}) {
-  const meta = CR_DRILL_META[kind] || {
-    title: kind,
-    note: ''
-  };
-  const [page, setPage] = useState(1);
-  const pageSize = 50;
-  useEffect(() => setPage(1), [kind]);
-  const {
-    data,
-    err,
-    loading
-  } = useData('/api/cheapest-real-drill/' + kind + '?limit=' + pageSize + '&offset=' + (page - 1) * pageSize, [kind, page]);
-  const total = data ? data.total : 0;
-  const pg = data ? {
-    page,
-    page_size: pageSize,
-    total_rows: total,
-    total_pages: Math.max(1, Math.ceil(total / pageSize))
-  } : null;
-  return /*#__PURE__*/React.createElement("div", {
-    className: "panel",
-    style: {
-      marginTop: 14
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center'
-    }
-  }, /*#__PURE__*/React.createElement("h3", null, meta.title, " 明細"), /*#__PURE__*/React.createElement("button", {
-    className: "ghost small",
-    onClick: onClose
-  }, "收合 ✕")), /*#__PURE__*/React.createElement("div", {
-    className: "small muted",
-    style: {
-      marginBottom: 8
-    }
-  }, meta.note), loading ? /*#__PURE__*/React.createElement(Loading, null) : err ? /*#__PURE__*/React.createElement(Err, {
-    m: err
-  }) : !data || !data.rows || !data.rows.length ? /*#__PURE__*/React.createElement("div", {
-    className: "empty small"
-  }, "無資料") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    className: "table-wrap"
-  }, /*#__PURE__*/React.createElement("table", {
-    className: "sku-table"
-  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "SKU ID"), /*#__PURE__*/React.createElement("th", null, "品牌"), /*#__PURE__*/React.createElement("th", null, "產品名稱"), /*#__PURE__*/React.createElement("th", null, "Product Key"), /*#__PURE__*/React.createElement("th", null, "Main Cat"), /*#__PURE__*/React.createElement("th", null, "Sub Cat"), /*#__PURE__*/React.createElement("th", {
-    style: {
-      textAlign: 'right'
-    }
-  }, "折後價"), /*#__PURE__*/React.createElement("th", null, "庫存"), /*#__PURE__*/React.createElement("th", null, "Key 排名"))), /*#__PURE__*/React.createElement("tbody", null, data.rows.map(s => /*#__PURE__*/React.createElement("tr", {
-    key: s.sku_id
-  }, /*#__PURE__*/React.createElement("td", {
-    className: "mono small"
-  }, s.sku_id), /*#__PURE__*/React.createElement("td", {
-    className: "small"
-  }, s.brand || '—'), /*#__PURE__*/React.createElement("td", {
-    className: "small"
-  }, s.product_name), /*#__PURE__*/React.createElement("td", {
-    className: "small muted"
-  }, s.display_key || '—'), /*#__PURE__*/React.createElement("td", {
-    className: "small"
-  }, s.main_cat || '—'), /*#__PURE__*/React.createElement("td", {
-    className: "small"
-  }, s.sub_cat || '—'), /*#__PURE__*/React.createElement("td", {
-    style: {
-      textAlign: 'right'
-    },
-    className: "small"
-  }, s.discount_price != null ? '$' + s.discount_price : '—'), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(StockBadge2, {
-    s: s.stock_status
-  })), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(RankBadge, {
-    s: s
-  }))))))), pg && pg.total_pages > 1 && /*#__PURE__*/React.createElement(Pagination, {
-    pg: pg,
-    onPage: setPage
-  })));
-}
 function Overview() {
   const {
     data,
@@ -528,7 +442,7 @@ function Overview() {
   const [visDrill, setVisDrill] = useState(null); // 'visible' | 'invisible' | null
   const [statDrill, setStatDrill] = useState(null); // top-card drill key | null
   if (loading) return /*#__PURE__*/React.createElement(Loading, null);
-  const cards = [['Main Cat', data.large_groups, 'large-groups'], ['SKUs', data.skus, 'skus']];
+  const cards = [['Main Cat', data.large_groups, 'large-groups']];
   const freshness = /*#__PURE__*/React.createElement(React.Fragment, null, "最後線上狀態更新：", fmtTime(data.last_visibility_refresh), /*#__PURE__*/React.createElement("br", null), "最後價格更新：", fmtTime(data.last_price_refresh), /*#__PURE__*/React.createElement("br", null), "最後庫存更新：", fmtTime(data.last_stock_refresh));
   return /*#__PURE__*/React.createElement(Page, {
     title: "總覽",
@@ -546,7 +460,13 @@ function Overview() {
     className: "num"
   }, v ?? 0), /*#__PURE__*/React.createElement("div", {
     className: "lbl"
-  }, l, " →")))), statDrill && /*#__PURE__*/React.createElement(StatDrill, {
+  }, l, " →"))), /*#__PURE__*/React.createElement("div", {
+    className: "card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "num"
+  }, data.skus ?? 0), /*#__PURE__*/React.createElement("div", {
+    className: "lbl"
+  }, "SKUs"))), statDrill && /*#__PURE__*/React.createElement(StatDrill, {
     kind: statDrill,
     key: statDrill,
     onClose: () => setStatDrill(null)
@@ -559,9 +479,19 @@ function Overview() {
     }
   }, "SKU 層級的價格與庫存觀測。摘要按 Key / 符號 / Main Cat 計算，觀測永在 SKU 層。"), /*#__PURE__*/React.createElement(PriceStockSummary, {
     onPick: setStockDrill
-  })), stockDrill && /*#__PURE__*/React.createElement(StockDrill, {
-    status: stockDrill,
-    key: stockDrill
+  })), stockDrill && /*#__PURE__*/React.createElement(TreeDrillPanel, {
+    sel: {
+      fam: 'stock',
+      status: stockDrill
+    },
+    key: 'stock' + stockDrill,
+    title: {
+      IN_STOCK: '有貨',
+      LOW_STOCK: '少貨',
+      OUT_OF_STOCK: '缺貨',
+      OFFLINE: '離線'
+    }[stockDrill] || stockDrill,
+    onClose: () => setStockDrill(null)
   }), /*#__PURE__*/React.createElement("div", {
     className: "panel"
   }, /*#__PURE__*/React.createElement("h3", null, "可見 / 隱藏 總覽"), /*#__PURE__*/React.createElement("div", {
@@ -591,15 +521,13 @@ function Overview() {
     }
   }, data.offline_count ?? 0), /*#__PURE__*/React.createElement("div", {
     className: "lbl"
-  }, "隱藏（離線）→")), /*#__PURE__*/React.createElement("div", {
-    className: "card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "num"
-  }, data.visibility_unknown_count ?? 0), /*#__PURE__*/React.createElement("div", {
-    className: "lbl"
-  }, "未知")))), visDrill && /*#__PURE__*/React.createElement(VisDrill, {
-    state: visDrill,
-    key: visDrill,
+  }, "隱藏（離線）→")))), visDrill && /*#__PURE__*/React.createElement(TreeDrillPanel, {
+    sel: {
+      fam: 'vis',
+      state: visDrill
+    },
+    key: 'vis' + visDrill,
+    title: visDrill === 'invisible' ? '隱藏（離線）' : '可見（線上）',
     onClose: () => setVisDrill(null)
   }), /*#__PURE__*/React.createElement("div", {
     className: "panel"
@@ -608,21 +536,7 @@ function Overview() {
     style: {
       marginBottom: 8
     }
-  }, "每個 Product Key 的「最平」第 1 名，而家有幾多個同時係「有貨 Top1」（最平嗰個有貨）。最平缺貨時，有貨 Top1 會落到次平、第三平…"), /*#__PURE__*/React.createElement(CheapestRealPanel, null)), /*#__PURE__*/React.createElement("div", {
-    className: "grid2"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "panel"
-  }, /*#__PURE__*/React.createElement("h3", null, "最近修正"), data.recent_corrections && data.recent_corrections.length ? /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("tbody", null, data.recent_corrections.slice(0, 8).map(c => /*#__PURE__*/React.createElement("tr", {
-    key: c.id
-  }, /*#__PURE__*/React.createElement("td", {
-    className: "small"
-  }, c.entity_type), /*#__PURE__*/React.createElement("td", {
-    className: "small"
-  }, c.action), /*#__PURE__*/React.createElement("td", {
-    className: "small muted"
-  }, fmtTime(c.created_at)))))) : /*#__PURE__*/React.createElement("div", {
-    className: "empty small"
-  }, "暫無修正記錄"))), cat && /*#__PURE__*/React.createElement("div", {
+  }, "每個 Product Key 的「最平」第 1 名，而家有幾多個同時係「有貨 Top1」（最平嗰個有貨）。最平缺貨時，有貨 Top1 會落到次平、第三平…"), /*#__PURE__*/React.createElement(CheapestRealPanel, null)), cat && /*#__PURE__*/React.createElement("div", {
     className: "panel",
     style: {
       marginTop: 14
@@ -683,84 +597,6 @@ function Overview() {
       textAlign: 'right'
     }
   }, r.cnt)))))));
-}
-
-// Visibility drill panel: lists SKUs that are 可見 (online) or 隱藏 (offline).
-function VisDrill({
-  state,
-  onClose
-}) {
-  const [page, setPage] = useState(1);
-  const pageSize = 50;
-  const {
-    data,
-    err,
-    loading
-  } = useData('/api/visibility-drill/' + state + '?limit=' + pageSize + '&offset=' + (page - 1) * pageSize, [state, page]);
-  const title = state === 'invisible' ? '隱藏（離線）產品' : '可見（線上）產品';
-  const pg = data ? {
-    page,
-    page_size: pageSize,
-    total_rows: data.total,
-    total_pages: Math.max(1, Math.ceil(data.total / pageSize))
-  } : null;
-  return /*#__PURE__*/React.createElement("div", {
-    className: "panel",
-    style: {
-      marginTop: 14
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center'
-    }
-  }, /*#__PURE__*/React.createElement("h3", {
-    style: {
-      margin: 0
-    }
-  }, title, " 明細"), /*#__PURE__*/React.createElement("button", {
-    className: "ghost small",
-    onClick: onClose
-  }, "收合 ✕")), loading ? /*#__PURE__*/React.createElement(Loading, null) : err ? /*#__PURE__*/React.createElement(Err, {
-    m: err
-  }) : !data || !data.rows.length ? /*#__PURE__*/React.createElement("div", {
-    className: "empty small"
-  }, "無資料") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    className: "table-wrap"
-  }, /*#__PURE__*/React.createElement("table", {
-    className: "sku-table"
-  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "SKU ID"), /*#__PURE__*/React.createElement("th", null, "品牌"), /*#__PURE__*/React.createElement("th", null, "產品名稱"), /*#__PURE__*/React.createElement("th", null, "規格"), /*#__PURE__*/React.createElement("th", null, "Main Cat"), /*#__PURE__*/React.createElement("th", null, "Sub Cat"), /*#__PURE__*/React.createElement("th", {
-    style: {
-      textAlign: 'right'
-    }
-  }, "折後價"), /*#__PURE__*/React.createElement("th", null, "Key 排名"), /*#__PURE__*/React.createElement("th", null, "顯示狀態"))), /*#__PURE__*/React.createElement("tbody", null, data.rows.map(s => /*#__PURE__*/React.createElement("tr", {
-    key: s.id
-  }, /*#__PURE__*/React.createElement("td", {
-    className: "mono small"
-  }, s.sku_id), /*#__PURE__*/React.createElement("td", {
-    className: "small"
-  }, s.brand || '—'), /*#__PURE__*/React.createElement("td", {
-    className: "small"
-  }, s.product_name), /*#__PURE__*/React.createElement("td", {
-    className: "small muted"
-  }, s.packing_spec || '—'), /*#__PURE__*/React.createElement("td", {
-    className: "small"
-  }, s.main_cat || '—'), /*#__PURE__*/React.createElement("td", {
-    className: "small"
-  }, s.sub_cat || '—'), /*#__PURE__*/React.createElement("td", {
-    style: {
-      textAlign: 'right'
-    },
-    className: "small"
-  }, s.discount_price != null ? '$' + s.discount_price : '—'), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(RankBadge, {
-    s: s
-  })), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(VisBadge, {
-    v: s.is_invisible
-  }))))))), pg && pg.total_pages > 1 && /*#__PURE__*/React.createElement(Pagination, {
-    pg: pg,
-    onPage: setPage
-  })));
 }
 
 // Stat drill panel: shows what each top-card count includes.
@@ -1541,34 +1377,12 @@ function PriceStockSummary({
     color: "var(--amber)",
     val: data.low_stock,
     lbl: "少貨"
-  }), /*#__PURE__*/React.createElement("div", {
-    className: "card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "num"
-  }, data.unknown_stock), /*#__PURE__*/React.createElement("div", {
-    className: "lbl"
-  }, "離線")), /*#__PURE__*/React.createElement("div", {
-    className: "card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "num"
-  }, data.active_promotions), /*#__PURE__*/React.createElement("div", {
-    className: "lbl"
-  }, "進行中推廣")), /*#__PURE__*/React.createElement("div", {
-    className: "card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "num"
-  }, data.missing_price), /*#__PURE__*/React.createElement("div", {
-    className: "lbl"
-  }, "缺價格")), /*#__PURE__*/React.createElement("div", {
-    className: "card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "num",
-    style: {
-      color: 'var(--amber)'
-    }
-  }, data.stale_price + data.stale_stock), /*#__PURE__*/React.createElement("div", {
-    className: "lbl"
-  }, "過期數據")));
+  }), /*#__PURE__*/React.createElement(Card, {
+    status: "OFFLINE",
+    color: "var(--muted,#6b7280)",
+    val: data.unknown_stock,
+    lbl: "離線"
+  }));
 }
 
 // ---------- Import / Export ----------

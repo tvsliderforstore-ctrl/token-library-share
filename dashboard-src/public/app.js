@@ -124,17 +124,64 @@ function RankBadge({s}){
 }
 
 // 總覽 panel: how many Product Keys' "cheapest" (rank-1) SKU is ALSO the real top-1 (in stock).
+// Cards are pressable — they drill into the representative SKU per key.
 function CheapestRealPanel(){
   const {data,err,loading}=useData('/api/cheapest-real-overview');
+  const [drill,setDrill]=useState(null);   // 'is-real' | 'not-real' | 'substituted' | null
   if(loading) return <Loading/>;
   if(err) return <Err m={err}/>;
   if(!data) return null;
   const pct = data.cheapest_total? Math.round(data.cheapest_is_real/data.cheapest_total*100) : 0;
-  return <div className="cards">
-    <div className="card"><div className="num" style={{color:'var(--green,#16a34a)'}}>{data.cheapest_is_real}</div><div className="lbl">最平＝有貨Top1（最平有貨）</div></div>
-    <div className="card"><div className="num" style={{color:'var(--amber,#d97706)'}}>{data.cheapest_not_real}</div><div className="lbl">最平缺貨（非有貨Top1）</div></div>
-    <div className="card"><div className="num">{data.real_substituted}</div><div className="lbl">有貨Top1係次平/更後</div></div>
-    <div className="card"><div className="num">{pct}%</div><div className="lbl">最平有貨比例（共 {data.cheapest_total} Keys）</div></div>
+  return <>
+    <div className="cards">
+      <button className="card card-btn" onClick={()=>setDrill(drill==='is-real'?null:'is-real')}><div className="num" style={{color:'var(--green,#16a34a)'}}>{data.cheapest_is_real}</div><div className="lbl">最平＝有貨Top1（最平有貨）→</div></button>
+      <button className="card card-btn" onClick={()=>setDrill(drill==='not-real'?null:'not-real')}><div className="num" style={{color:'var(--amber,#d97706)'}}>{data.cheapest_not_real}</div><div className="lbl">最平缺貨（非有貨Top1）→</div></button>
+      <button className="card card-btn" onClick={()=>setDrill(drill==='substituted'?null:'substituted')}><div className="num">{data.real_substituted}</div><div className="lbl">有貨Top1係次平/更後 →</div></button>
+      <div className="card"><div className="num">{pct}%</div><div className="lbl">最平有貨比例（共 {data.cheapest_total} Keys）</div></div>
+    </div>
+    {drill && <CheapestRealDrill kind={drill} key={drill} onClose={()=>setDrill(null)}/>}
+  </>;
+}
+
+// Drill table for one 最平/有貨 Top1 bucket. One representative SKU per Product Key.
+const CR_DRILL_META = {
+  'is-real':     {title:'最平＝有貨Top1（最平嗰個有貨）', note:'每個 Key 最平嗰個 SKU 而家有貨，所以佢就係有貨 Top1。'},
+  'not-real':    {title:'最平缺貨（非有貨Top1）', note:'每個 Key 最平嗰個 SKU 而家缺貨；下面列出呢個最平（缺貨）嘅 SKU。'},
+  'substituted': {title:'有貨Top1係次平/更後', note:'最平嗰個缺貨，所以有貨 Top1 落到次平（或更後）。下面列出而家嘅有貨 Top1（唔係最平嗰個）。'},
+};
+function CheapestRealDrill({kind, onClose}){
+  const meta = CR_DRILL_META[kind] || {title:kind, note:''};
+  const [page,setPage]=useState(1);
+  const pageSize=50;
+  useEffect(()=>setPage(1),[kind]);
+  const {data,err,loading}=useData('/api/cheapest-real-drill/'+kind+'?limit='+pageSize+'&offset='+((page-1)*pageSize),[kind,page]);
+  const total = data?data.total:0;
+  const pg = data? { page, page_size:pageSize, total_rows:total, total_pages:Math.max(1,Math.ceil(total/pageSize)) } : null;
+  return <div className="panel" style={{marginTop:14}}>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+      <h3>{meta.title} 明細</h3>
+      <button className="ghost small" onClick={onClose}>收合 ✕</button>
+    </div>
+    <div className="small muted" style={{marginBottom:8}}>{meta.note}</div>
+    {loading? <Loading/> : err? <Err m={err}/> :
+      !data||!data.rows||!data.rows.length? <div className="empty small">無資料</div> :
+      <>
+      <div className="table-wrap"><table className="sku-table">
+        <thead><tr><th>SKU ID</th><th>品牌</th><th>產品名稱</th><th>Product Key</th><th>Main Cat</th><th>Sub Cat</th><th style={{textAlign:'right'}}>折後價</th><th>庫存</th><th>Key 排名</th></tr></thead>
+        <tbody>{data.rows.map(s=> <tr key={s.sku_id}>
+          <td className="mono small">{s.sku_id}</td>
+          <td className="small">{s.brand||'—'}</td>
+          <td className="small">{s.product_name}</td>
+          <td className="small muted">{s.display_key||'—'}</td>
+          <td className="small">{s.main_cat||'—'}</td>
+          <td className="small">{s.sub_cat||'—'}</td>
+          <td style={{textAlign:'right'}} className="small">{s.discount_price!=null?('$'+s.discount_price):'—'}</td>
+          <td><StockBadge2 s={s.stock_status}/></td>
+          <td><RankBadge s={s}/></td>
+        </tr>)}</tbody>
+      </table></div>
+      {pg && pg.total_pages>1 && <Pagination pg={pg} onPage={setPage}/>}
+      </>}
   </div>;
 }
 

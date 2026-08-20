@@ -348,22 +348,25 @@ function RankBadge({
 }
 
 // 總覽 panel: how many Product Keys' "cheapest" (rank-1) SKU is ALSO the real top-1 (in stock).
+// Cards are pressable — they drill into the representative SKU per key.
 function CheapestRealPanel() {
   const {
     data,
     err,
     loading
   } = useData('/api/cheapest-real-overview');
+  const [drill, setDrill] = useState(null); // 'is-real' | 'not-real' | 'substituted' | null
   if (loading) return /*#__PURE__*/React.createElement(Loading, null);
   if (err) return /*#__PURE__*/React.createElement(Err, {
     m: err
   });
   if (!data) return null;
   const pct = data.cheapest_total ? Math.round(data.cheapest_is_real / data.cheapest_total * 100) : 0;
-  return /*#__PURE__*/React.createElement("div", {
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "cards"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "card"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "card card-btn",
+    onClick: () => setDrill(drill === 'is-real' ? null : 'is-real')
   }, /*#__PURE__*/React.createElement("div", {
     className: "num",
     style: {
@@ -371,8 +374,9 @@ function CheapestRealPanel() {
     }
   }, data.cheapest_is_real), /*#__PURE__*/React.createElement("div", {
     className: "lbl"
-  }, "最平＝有貨Top1（最平有貨）")), /*#__PURE__*/React.createElement("div", {
-    className: "card"
+  }, "最平＝有貨Top1（最平有貨）→")), /*#__PURE__*/React.createElement("button", {
+    className: "card card-btn",
+    onClick: () => setDrill(drill === 'not-real' ? null : 'not-real')
   }, /*#__PURE__*/React.createElement("div", {
     className: "num",
     style: {
@@ -380,19 +384,122 @@ function CheapestRealPanel() {
     }
   }, data.cheapest_not_real), /*#__PURE__*/React.createElement("div", {
     className: "lbl"
-  }, "最平缺貨（非有貨Top1）")), /*#__PURE__*/React.createElement("div", {
-    className: "card"
+  }, "最平缺貨（非有貨Top1）→")), /*#__PURE__*/React.createElement("button", {
+    className: "card card-btn",
+    onClick: () => setDrill(drill === 'substituted' ? null : 'substituted')
   }, /*#__PURE__*/React.createElement("div", {
     className: "num"
   }, data.real_substituted), /*#__PURE__*/React.createElement("div", {
     className: "lbl"
-  }, "有貨Top1係次平/更後")), /*#__PURE__*/React.createElement("div", {
+  }, "有貨Top1係次平/更後 →")), /*#__PURE__*/React.createElement("div", {
     className: "card"
   }, /*#__PURE__*/React.createElement("div", {
     className: "num"
   }, pct, "%"), /*#__PURE__*/React.createElement("div", {
     className: "lbl"
-  }, "最平有貨比例（共 ", data.cheapest_total, " Keys）")));
+  }, "最平有貨比例（共 ", data.cheapest_total, " Keys）"))), drill && /*#__PURE__*/React.createElement(CheapestRealDrill, {
+    kind: drill,
+    key: drill,
+    onClose: () => setDrill(null)
+  }));
+}
+
+// Drill table for one 最平/有貨 Top1 bucket. One representative SKU per Product Key.
+const CR_DRILL_META = {
+  'is-real': {
+    title: '最平＝有貨Top1（最平嗰個有貨）',
+    note: '每個 Key 最平嗰個 SKU 而家有貨，所以佢就係有貨 Top1。'
+  },
+  'not-real': {
+    title: '最平缺貨（非有貨Top1）',
+    note: '每個 Key 最平嗰個 SKU 而家缺貨；下面列出呢個最平（缺貨）嘅 SKU。'
+  },
+  'substituted': {
+    title: '有貨Top1係次平/更後',
+    note: '最平嗰個缺貨，所以有貨 Top1 落到次平（或更後）。下面列出而家嘅有貨 Top1（唔係最平嗰個）。'
+  }
+};
+function CheapestRealDrill({
+  kind,
+  onClose
+}) {
+  const meta = CR_DRILL_META[kind] || {
+    title: kind,
+    note: ''
+  };
+  const [page, setPage] = useState(1);
+  const pageSize = 50;
+  useEffect(() => setPage(1), [kind]);
+  const {
+    data,
+    err,
+    loading
+  } = useData('/api/cheapest-real-drill/' + kind + '?limit=' + pageSize + '&offset=' + (page - 1) * pageSize, [kind, page]);
+  const total = data ? data.total : 0;
+  const pg = data ? {
+    page,
+    page_size: pageSize,
+    total_rows: total,
+    total_pages: Math.max(1, Math.ceil(total / pageSize))
+  } : null;
+  return /*#__PURE__*/React.createElement("div", {
+    className: "panel",
+    style: {
+      marginTop: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("h3", null, meta.title, " 明細"), /*#__PURE__*/React.createElement("button", {
+    className: "ghost small",
+    onClick: onClose
+  }, "收合 ✕")), /*#__PURE__*/React.createElement("div", {
+    className: "small muted",
+    style: {
+      marginBottom: 8
+    }
+  }, meta.note), loading ? /*#__PURE__*/React.createElement(Loading, null) : err ? /*#__PURE__*/React.createElement(Err, {
+    m: err
+  }) : !data || !data.rows || !data.rows.length ? /*#__PURE__*/React.createElement("div", {
+    className: "empty small"
+  }, "無資料") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "table-wrap"
+  }, /*#__PURE__*/React.createElement("table", {
+    className: "sku-table"
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "SKU ID"), /*#__PURE__*/React.createElement("th", null, "品牌"), /*#__PURE__*/React.createElement("th", null, "產品名稱"), /*#__PURE__*/React.createElement("th", null, "Product Key"), /*#__PURE__*/React.createElement("th", null, "Main Cat"), /*#__PURE__*/React.createElement("th", null, "Sub Cat"), /*#__PURE__*/React.createElement("th", {
+    style: {
+      textAlign: 'right'
+    }
+  }, "折後價"), /*#__PURE__*/React.createElement("th", null, "庫存"), /*#__PURE__*/React.createElement("th", null, "Key 排名"))), /*#__PURE__*/React.createElement("tbody", null, data.rows.map(s => /*#__PURE__*/React.createElement("tr", {
+    key: s.sku_id
+  }, /*#__PURE__*/React.createElement("td", {
+    className: "mono small"
+  }, s.sku_id), /*#__PURE__*/React.createElement("td", {
+    className: "small"
+  }, s.brand || '—'), /*#__PURE__*/React.createElement("td", {
+    className: "small"
+  }, s.product_name), /*#__PURE__*/React.createElement("td", {
+    className: "small muted"
+  }, s.display_key || '—'), /*#__PURE__*/React.createElement("td", {
+    className: "small"
+  }, s.main_cat || '—'), /*#__PURE__*/React.createElement("td", {
+    className: "small"
+  }, s.sub_cat || '—'), /*#__PURE__*/React.createElement("td", {
+    style: {
+      textAlign: 'right'
+    },
+    className: "small"
+  }, s.discount_price != null ? '$' + s.discount_price : '—'), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(StockBadge2, {
+    s: s.stock_status
+  })), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(RankBadge, {
+    s: s
+  }))))))), pg && pg.total_pages > 1 && /*#__PURE__*/React.createElement(Pagination, {
+    pg: pg,
+    onPage: setPage
+  })));
 }
 function Overview() {
   const {

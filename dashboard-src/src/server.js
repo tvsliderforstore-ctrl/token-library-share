@@ -83,6 +83,11 @@ async function createApp(dbFile) {
     sendJson(res, 200, out);
   });
   r.get('/api/cheapest-real-overview', (req, res) => sendJson(res, 200, repo.cheapestRealOverview(db)));
+  r.get('/api/cheapest-real-drill/:kind', (req, res, p, q) => {
+    const out = repo.cheapestRealDrill(db, p.kind, { limit: q.limit, offset: q.offset });
+    if (!out) return sendError(res, 404, 'Unknown cheapest-real drill kind: ' + p.kind);
+    sendJson(res, 200, out);
+  });
   r.patch('/api/sub-categories/:code', async (req, res, p) => {
     const body = await readJson(req);
     // Block deactivating is allowed (deactivate, not delete). Guard: cannot move a Sub Cat

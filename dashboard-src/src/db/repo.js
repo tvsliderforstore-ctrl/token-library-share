@@ -380,6 +380,49 @@ function cheapestRealOverview(db) {
   };
 }
 
+// Drill-down for the 最平/有貨 Top1 總覽 cards. kind:
+//   'is-real'      -> keys where cheapest top-1 IS the real top-1 (cheapest in stock)
+//   'not-real'     -> keys where the cheapest is OOS (NOT the real top-1) — show the cheapest (OOS) SKU
+//   'substituted'  -> keys whose real top-1 is a pricier substitute — show the real top-1 SKU
+// Returns {total, rows} paginated. Each row: one representative SKU per Product Key.
+function cheapestRealDrill(db, kind, { limit = 50, offset = 0 } = {}) {
+  limit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 500);
+  offset = Math.max(parseInt(offset, 10) || 0, 0);
+  const rows = db.all(`
+    SELECT s.id, s.external_sku_id AS sku_id, s.raw_sku_name AS product_name,
+           s.product_key_id, k.display_key, g.name_zh AS main_cat, sc.name_zh AS sub_cat,
+           t.name_zh AS token_name, b.display_name AS brand,
+           lp.effective_price_minor, ls.stock_status
+    FROM sku_records s
+    LEFT JOIN product_keys k ON k.id=s.product_key_id
+    LEFT JOIN large_groups g ON g.id=s.large_group_id
+    LEFT JOIN sub_categories sc ON sc.id=s.sub_category_id
+    LEFT JOIN product_tokens t ON t.id=s.product_token_id
+    LEFT JOIN brands b ON b.id=k.brand_id
+    ${_latestPrice} ${_latestStock}
+    WHERE s.active=1 AND s.product_key_id IS NOT NULL`, []);
+  computeKeyRanks(rows);
+  // pick the representative SKU per kind
+  let picked = rows.filter((r) => {
+    if (kind === 'is-real') return r.is_cheapest && r.is_real_top1;
+    if (kind === 'not-real') return r.is_cheapest && !r.is_real_top1;
+    if (kind === 'substituted') return r.is_real_top1 && r.real_top1_offset > 0;
+    return false;
+  });
+  // stable order by main_cat then sku
+  picked.sort((a, b) => String(a.main_cat || '').localeCompare(String(b.main_cat || '')) || String(a.sku_id).localeCompare(String(b.sku_id)));
+  const total = picked.length;
+  const pageRows = picked.slice(offset, offset + limit).map((r) => ({
+    sku_id: r.sku_id, product_name: r.product_name, display_key: r.display_key,
+    main_cat: r.main_cat, sub_cat: r.sub_cat, token_name: r.token_name, brand: r.brand,
+    discount_price: r.effective_price_minor != null ? r.effective_price_minor / 100 : null,
+    stock_status: r.stock_status,
+    cheapest_rank: r.cheapest_rank, cheapest_group_size: r.cheapest_group_size,
+    is_cheapest: r.is_cheapest, is_real_top1: r.is_real_top1, real_top1_offset: r.real_top1_offset,
+  }));
+  return { total, rows: pageRows };
+}
+
 const Categories = {
   // Main Cat cards: per-group rollup incl. operational counts.
   mainList(db) {
@@ -737,4 +780,4 @@ function statDrill(db, kind, { limit = 50, offset = 0 } = {}) {
   }
 }
 
-module.exports = { Groups, Tokens, Keys, Skus, Audit, Categories, overview, statDrill, cheapestRealOverview, keyRankMap, computeKeyRanks, packFormat, trimNum };
+module.exports = { Groups, Tokens, Keys, Skus, Audit, Categories, overview, statDrill, cheapestRealOverview, cheapestRealDrill, keyRankMap, computeKeyRanks, packFormat, trimNum };

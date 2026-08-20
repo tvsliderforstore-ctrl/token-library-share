@@ -7,7 +7,9 @@ const api = {
   post(u,b){return this.send(u,'POST',b)}, patch(u,b){return this.send(u,'PATCH',b)},
 };
 const fmt$ = (v)=> v==null? '—' : '$'+(Number(v).toFixed(1));
-const fmtTime = (iso)=>{ if(!iso) return '—'; const d=new Date(iso); const h=(Date.now()-d.getTime())/36e5; if(h<1) return Math.max(1,Math.round(h*60))+' 分鐘前'; if(h<48) return Math.round(h)+' 小時前'; return d.toLocaleDateString('zh-HK'); };
+const fmtTime = (iso)=>{ if(!iso) return '—'; const d=new Date(iso); if(isNaN(d)) return '—';
+  const p=(n)=>String(n).padStart(2,'0');
+  return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`; };
 const Fresh = ({f})=> f==='FRESH'? <span className="badge b-green">最新</span> : f==='STALE'? <span className="badge b-amber">過期</span> : <span className="badge b-grey">未有數據</span>;
 const Conf = ({c})=> c==null? null : <span className={"badge "+(c>=0.95?'b-green':c>=0.75?'b-amber':'b-red')}>{(c*100).toFixed(0)}%</span>;
 const ReviewBadge = ({s})=> s==='PENDING'? <span className="badge b-amber">待覆核</span> : s==='CONFIRMED'? <span className="badge b-green">已確認</span> : <span className="badge b-grey">{s||'—'}</span>;
@@ -90,7 +92,7 @@ function TreeSkus({base, tokenId}){
   if(err) return <Err m={err}/>;
   if(!data||!data.length) return <div className="empty small">無 SKU</div>;
   return <div className="table-wrap"><table>
-    <thead><tr><th>來源</th><th>SKU</th><th>產品名稱</th><th>Product Key</th><th style={{textAlign:'right'}}>售價</th><th>庫存</th><th>Key 排名</th></tr></thead>
+    <thead><tr><th>來源</th><th>SKU</th><th>產品名稱</th><th>Facing id</th><th style={{textAlign:'right'}}>售價</th><th>庫存</th><th>Key 排名</th></tr></thead>
     <tbody>{data.map(s=> <tr key={s.sku_id}>
       <td><ChanBadge sku={s.sku_id}/></td>
       <td className="mono small">{s.sku_id}</td>
@@ -348,7 +350,7 @@ function Skus(){
     <Err m={err}/>
     <div className="toolbar"><input style={{flex:1}} placeholder="搜尋名稱 / SKU ID / 條碼" value={q} onChange={e=>setQ(e.target.value)}/></div>
     <div className="panel">{data&&data.length? <table>
-      <thead><tr><th>SKU ID</th><th>原始名稱</th><th>Main Cat</th><th>符號</th><th>Product Key</th><th>信心</th><th>覆核</th><th></th></tr></thead>
+      <thead><tr><th>SKU ID</th><th>原始名稱</th><th>Main Cat</th><th>符號</th><th>Facing id</th><th>信心</th><th>覆核</th><th></th></tr></thead>
       <tbody>{data.map(s=> <React.Fragment key={s.id}>
         <tr onClick={()=>setOpen(open===s.id?null:s.id)} style={{cursor:'pointer',background:open===s.id?'#f0f6ff':'inherit'}}>
         <td className="mono small"><ChanBadge sku={s.external_sku_id}/> {s.external_sku_id||s.id}</td><td className="sku-name small" title={s.raw_sku_name}>{s.raw_sku_name}<Copy text={s.raw_sku_name}/></td>

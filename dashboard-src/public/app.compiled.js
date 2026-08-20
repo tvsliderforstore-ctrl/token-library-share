@@ -36,10 +36,9 @@ const fmt$ = v => v == null ? '—' : '$' + Number(v).toFixed(1);
 const fmtTime = iso => {
   if (!iso) return '—';
   const d = new Date(iso);
-  const h = (Date.now() - d.getTime()) / 36e5;
-  if (h < 1) return Math.max(1, Math.round(h * 60)) + ' 分鐘前';
-  if (h < 48) return Math.round(h) + ' 小時前';
-  return d.toLocaleDateString('zh-HK');
+  if (isNaN(d)) return '—';
+  const p = n => String(n).padStart(2, '0');
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 };
 const Fresh = ({
   f
@@ -291,7 +290,7 @@ function TreeSkus({
   }, "無 SKU");
   return /*#__PURE__*/React.createElement("div", {
     className: "table-wrap"
-  }, /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "來源"), /*#__PURE__*/React.createElement("th", null, "SKU"), /*#__PURE__*/React.createElement("th", null, "產品名稱"), /*#__PURE__*/React.createElement("th", null, "Product Key"), /*#__PURE__*/React.createElement("th", {
+  }, /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "來源"), /*#__PURE__*/React.createElement("th", null, "SKU"), /*#__PURE__*/React.createElement("th", null, "產品名稱"), /*#__PURE__*/React.createElement("th", null, "Facing id"), /*#__PURE__*/React.createElement("th", {
     style: {
       textAlign: 'right'
     }
@@ -1025,7 +1024,7 @@ function Skus() {
     onChange: e => setQ(e.target.value)
   })), /*#__PURE__*/React.createElement("div", {
     className: "panel"
-  }, data && data.length ? /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "SKU ID"), /*#__PURE__*/React.createElement("th", null, "原始名稱"), /*#__PURE__*/React.createElement("th", null, "Main Cat"), /*#__PURE__*/React.createElement("th", null, "符號"), /*#__PURE__*/React.createElement("th", null, "Product Key"), /*#__PURE__*/React.createElement("th", null, "信心"), /*#__PURE__*/React.createElement("th", null, "覆核"), /*#__PURE__*/React.createElement("th", null))), /*#__PURE__*/React.createElement("tbody", null, data.map(s => /*#__PURE__*/React.createElement(React.Fragment, {
+  }, data && data.length ? /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "SKU ID"), /*#__PURE__*/React.createElement("th", null, "原始名稱"), /*#__PURE__*/React.createElement("th", null, "Main Cat"), /*#__PURE__*/React.createElement("th", null, "符號"), /*#__PURE__*/React.createElement("th", null, "Facing id"), /*#__PURE__*/React.createElement("th", null, "信心"), /*#__PURE__*/React.createElement("th", null, "覆核"), /*#__PURE__*/React.createElement("th", null))), /*#__PURE__*/React.createElement("tbody", null, data.map(s => /*#__PURE__*/React.createElement(React.Fragment, {
     key: s.id
   }, /*#__PURE__*/React.createElement("tr", {
     onClick: () => setOpen(open === s.id ? null : s.id),

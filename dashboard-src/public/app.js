@@ -174,20 +174,30 @@ function Overview(){
       <div className="small muted" style={{marginBottom:8}}>每個 Product Key 的「最平」第 1 名，而家有幾多個同時係「有貨 Top1」（最平嗰個有貨）。最平缺貨時，有貨 Top1 會落到次平、第三平…</div>
       <CheapestRealPanel/>
     </div>
-    <div className="panel"><h3>價格與庫存總覽</h3>
-      <div className="small muted" style={{marginBottom:8}}>SKU 層級的價格與庫存觀測。摘要按 Key / 符號 / Main Cat 計算，觀測永在 SKU 層。</div>
-      <PriceStockSummary onPick={setStockDrill}/>
+    <div className="panel"><h3>sku 總覽</h3>
+      <div className="small muted" style={{marginBottom:8}}>SKU 層級的庫存觀測（有貨/少貨/缺貨/離線）與顯示狀態（根據 Tableau is_invisible 的可見/隱藏）。按下按鈕查看產品明細。</div>
+      <SkuOverviewCards data={data} onStock={setStockDrill} onVis={setVisDrill}/>
     </div>
     {stockDrill && <TreeDrillPanel sel={{fam:'stock',status:stockDrill}} key={'stock'+stockDrill} title={({IN_STOCK:'有貨',LOW_STOCK:'少貨',OUT_OF_STOCK:'缺貨',OFFLINE:'離線'})[stockDrill]||stockDrill} onClose={()=>setStockDrill(null)}/>}
-    <div className="panel"><h3>可見 / 隱藏 總覽</h3>
-      <div className="small muted" style={{marginBottom:8}}>根據 Tableau is_invisible。按下可見 / 隱藏 查看產品明細。</div>
-      <div className="cards">
-        <button className="card card-btn" onClick={()=>setVisDrill(visDrill==='visible'?null:'visible')}><div className="num" style={{color:'var(--green,#16a34a)'}}>{data.online_count??0}</div><div className="lbl">可見（線上）→</div></button>
-        <button className="card card-btn" onClick={()=>setVisDrill(visDrill==='invisible'?null:'invisible')}><div className="num" style={{color:'var(--muted,#6b7280)'}}>{data.offline_count??0}</div><div className="lbl">隱藏（離線）→</div></button>
-      </div>
-    </div>
-    {visDrill && <TreeDrillPanel sel={{fam:'vis',state:visDrill}} key={'vis'+visDrill} title={visDrill==='invisible'?'隱藏（離線）':'可見（線上）'} onClose={()=>setVisDrill(null)}/>}
+    {visDrill && <TreeDrillPanel sel={{fam:'vis',state:visDrill}} key={'vis'+visDrill} title={visDrill==='invisible'?'隱藏':'可見'} onClose={()=>setVisDrill(null)}/>}
   </Page>;
+}
+
+// Combined sku 總覽 cards: stock statuses (有貨/少貨/缺貨/離線) + visibility (可見/隱藏).
+function SkuOverviewCards({data, onStock, onVis}){
+  const {data:ps,err,loading}=useData('/api/price-stock/overview');
+  if(loading) return <Loading/>;
+  if(err) return <Err m={err}/>;
+  if(!ps) return null;
+  const Btn = ({onClick, color, val, lbl}) => <button className="card card-btn" onClick={onClick}><div className="num" style={{color}}>{val}</div><div className="lbl">{lbl} →</div></button>;
+  return <div className="cards">
+    <Btn onClick={()=>onStock('IN_STOCK')} color="var(--green)" val={ps.in_stock} lbl="有貨"/>
+    <Btn onClick={()=>onStock('OUT_OF_STOCK')} color="var(--red)" val={ps.out_of_stock} lbl="缺貨"/>
+    <Btn onClick={()=>onStock('LOW_STOCK')} color="var(--amber)" val={ps.low_stock} lbl="少貨"/>
+    <Btn onClick={()=>onStock('OFFLINE')} color="var(--muted,#6b7280)" val={ps.unknown_stock} lbl="離線"/>
+    <Btn onClick={()=>onVis('visible')} color="var(--green,#16a34a)" val={data.online_count??0} lbl="可見"/>
+    <Btn onClick={()=>onVis('invisible')} color="var(--muted,#6b7280)" val={data.offline_count??0} lbl="隱藏"/>
+  </div>;
 }
 
 // Stat drill panel: shows what each top-card count includes.
@@ -430,22 +440,6 @@ function Review(){
 
 // ---------- Price & Stock ----------
 // Shared summary cards (also embedded in 總覽). LOW_STOCK removed; UNKNOWN renamed to 離線.
-function PriceStockSummary({onPick}){
-  const {data,err,loading}=useData('/api/price-stock/overview');
-  if(loading) return <Loading/>;
-  if(err) return <Err m={err}/>;
-  if(!data) return null;
-  const Card = ({status, color, val, lbl}) => onPick
-    ? <button className="card card-btn" onClick={()=>onPick(status)}><div className="num" style={{color}}>{val}</div><div className="lbl">{lbl} →</div></button>
-    : <div className="card"><div className="num" style={{color}}>{val}</div><div className="lbl">{lbl}</div></div>;
-  return <div className="cards">
-    <Card status="IN_STOCK" color="var(--green)" val={data.in_stock} lbl="有貨"/>
-    <Card status="OUT_OF_STOCK" color="var(--red)" val={data.out_of_stock} lbl="缺貨"/>
-    <Card status="LOW_STOCK" color="var(--amber)" val={data.low_stock} lbl="少貨"/>
-    <Card status="OFFLINE" color="var(--muted,#6b7280)" val={data.unknown_stock} lbl="離線"/>
-  </div>;
-}
-
 // ---------- Import / Export ----------
 function ImportExport(){
   const [csv,setCsv]=useState(''); const [result,setResult]=useState(null); const [err,setErr]=useState(null); const [validOnly,setValidOnly]=useState(false);
@@ -546,21 +540,57 @@ function Categories(){
 // Direct all-SKU browser for 分類瀏覽: server-side pagination + the same filters
 // you'd see after pressing into a product token (keyword / SKU id / brand /
 // visibility / stock / review / 缺價 / 缺庫存).
+// Adds a Main Cat → Sub Cat → 產品符號 cascading drill; each level has an "all" option.
 function AllSkusView(){
   const [page,setPage]=useState(1);
   const [pageSize]=useState(30);
   const [f,setF]=useState({brand:'',visibility:'',stock_status:'',review_status:'',missing_price:'',missing_stock:'',keyword:'',sku_id:''});
+  // drill state
+  const [mainCat,setMainCat]=useState('');        // '' = all Main Cats
+  const [subCat,setSubCat]=useState('');          // '' = all sub-cats in chosen main (only meaningful when mainCat set)
+  const [tokenId,setTokenId]=useState('');        // '' = all tokens in chosen sub-cat
+  const {data:mains}=useData('/api/main-categories');
+  const {data:subsData}=useData(mainCat? '/api/main-categories/'+mainCat+'/sub-categories' : null, [mainCat]);
+  const {data:toksData}=useData(subCat? '/api/sub-categories/'+subCat+'/tokens' : null, [subCat]);
+
+  // SKU list URL: token > sub-cat > main > all
+  let skuUrl;
+  if(tokenId) skuUrl='/api/sub-categories/'+subCat+'/skus?';
+  else if(subCat) skuUrl='/api/sub-categories/'+subCat+'/skus?';
+  else if(mainCat) skuUrl='/api/main-categories/'+mainCat+'/skus?';
+  else skuUrl='/api/skus/all?';
   const qs = new URLSearchParams({page:String(page),page_size:String(pageSize)});
+  if(tokenId) qs.set('token_id',String(tokenId));
   Object.entries(f).forEach(([k,v])=>{ if(v) qs.set(k,v); });
-  const {data,err,loading}=useData('/api/skus/all?'+qs.toString(),[page,JSON.stringify(f)]);
+  const {data,err,loading}=useData(skuUrl+qs.toString(),[mainCat,subCat,tokenId,page,JSON.stringify(f)]);
   const {data:brands}=useData('/api/skus/all/brands');
+
   const set=(k,v)=>{ setPage(1); setF(prev=>({...prev,[k]:v})); };
   const reset=()=>{ setPage(1); setF({brand:'',visibility:'',stock_status:'',review_status:'',missing_price:'',missing_stock:'',keyword:'',sku_id:''}); };
+  const pickMain=(v)=>{ setPage(1); setMainCat(v); setSubCat(''); setTokenId(''); };
+  const pickSub=(v)=>{ setPage(1); setSubCat(v); setTokenId(''); };
+  const pickTok=(v)=>{ setPage(1); setTokenId(v); };
   const pg = data&&data.pagination;
   const hasFilter = Object.values(f).some(v=>v);
-  return <Page title="分類瀏覽" sub="直接瀏覽全部 SKU。可用關鍵字 / SKU ID / 品牌 / 顯示 / 庫存 / 覆核 篩選。">
+  const subCats = (subsData&&subsData.sub_cats)||[];
+  const tokens = (toksData&&toksData.tokens)||[];
+  return <Page title="分類瀏覽" sub="直接瀏覽全部 SKU，或用 Main Cat → Sub Cat → 產品符號 收窄範圍。">
     <Err m={err}/>
     <div className="panel">
+      <div className="toolbar filters" style={{marginBottom:8}}>
+        <select value={mainCat} onChange={e=>pickMain(e.target.value)} aria-label="Main Cat">
+          <option value="">全部 Main Cat</option>
+          {(mains||[]).map(m=> <option key={m.code} value={m.code}>{m.name} ({m.sku_count})</option>)}
+        </select>
+        {mainCat && <select value={subCat} onChange={e=>pickSub(e.target.value)} aria-label="Sub Cat">
+          <option value="">全部 Sub Cat（{mainCat}）</option>
+          {subCats.map(s=> <option key={s.code} value={s.code}>{s.name} ({s.sku_count})</option>)}
+        </select>}
+        {subCat && <select value={tokenId} onChange={e=>pickTok(e.target.value)} aria-label="產品符號">
+          <option value="">全部產品符號（{subCat}）</option>
+          {tokens.map(t=> <option key={t.id} value={t.id}>{t.name} ({t.sku_count})</option>)}
+        </select>}
+      </div>
       <div className="toolbar filters">
         <input placeholder="關鍵字（名稱/SKU/品牌/規格）" value={f.keyword} onChange={e=>set('keyword',e.target.value)} aria-label="關鍵字"/>
         <input placeholder="SKU ID" value={f.sku_id} onChange={e=>set('sku_id',e.target.value)} aria-label="SKU ID"/>

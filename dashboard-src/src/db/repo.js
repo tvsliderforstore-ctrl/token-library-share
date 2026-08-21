@@ -515,16 +515,31 @@ const Categories = {
   // Paginated, filtered SKU list for one Sub Cat. Server-side only.
   // Pass subCatCode = 'ALL' (or null) to list across every active SKU (分類瀏覽 direct view).
   skusInSub(db, subCatCode, opts = {}) {
-    const isAll = !subCatCode || String(subCatCode).toUpperCase() === 'ALL';
-    const sc = isAll ? null : this.getSub(db, subCatCode);
-    if (!isAll && !sc) return null;
+    return this._skuList(db, { subCatCode, ...opts });
+  },
+  // Paginated, filtered SKU list for one Main Cat (across all its sub-cats).
+  skusInMain(db, mainCatCode, opts = {}) {
+    return this._skuList(db, { mainCatCode, ...opts });
+  },
+  _skuList(db, { subCatCode, mainCatCode, ...opts } = {}) {
+    const isAll = !subCatCode && !mainCatCode;
+    let sc = null, mg = null;
+    if (subCatCode && String(subCatCode).toUpperCase() !== 'ALL') {
+      sc = this.getSub(db, subCatCode);
+      if (!sc) return null;
+    }
+    if (mainCatCode) {
+      mg = db.get('SELECT id, group_code, name_zh FROM large_groups WHERE group_code=?', [mainCatCode]);
+      if (!mg) return null;
+    }
     let page = parseInt(opts.page, 10); if (!(page >= 1)) page = 1;
     let pageSize = parseInt(opts.page_size, 10); if (!(pageSize >= 1)) pageSize = 30;
     if (pageSize > 100) pageSize = 100;
 
     const where = ['s.active = 1'];
     const params = [];
-    if (!isAll) { where.push('s.sub_category_id = ?'); params.push(sc.id); }
+    if (sc) { where.push('s.sub_category_id = ?'); params.push(sc.id); }
+    else if (mg) { where.push('s.large_group_id = ?'); params.push(mg.id); }
     if (opts.sku_id) { where.push('s.external_sku_id = ?'); params.push(String(opts.sku_id).trim()); }
     if (opts.brand) { where.push('b.display_name = ?'); params.push(opts.brand); }
     if (opts.product_token) { where.push('t.name_zh = ?'); params.push(opts.product_token); }
@@ -583,7 +598,7 @@ const Categories = {
     const rankMap = keyRankMap(db, keyIds);
 
     return {
-      main_cat: sc ? { code: sc.main_code, name: sc.main_name } : null,
+      main_cat: sc ? { code: sc.main_code, name: sc.main_name } : (mg ? { code: mg.group_code, name: mg.name_zh } : null),
       sub_cat: sc ? { code: sc.sub_cat_code, name: sc.name_zh } : null,
       pagination: { page, page_size: pageSize, total_rows: total, total_pages: totalPages },
       rows: rows.map((r) => {

@@ -475,13 +475,15 @@ function Overview() {
     }
   }, "每個 Product Key 的「最平」第 1 名，而家有幾多個同時係「有貨 Top1」（最平嗰個有貨）。最平缺貨時，有貨 Top1 會落到次平、第三平…"), /*#__PURE__*/React.createElement(CheapestRealPanel, null)), /*#__PURE__*/React.createElement("div", {
     className: "panel"
-  }, /*#__PURE__*/React.createElement("h3", null, "價格與庫存總覽"), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("h3", null, "sku 總覽"), /*#__PURE__*/React.createElement("div", {
     className: "small muted",
     style: {
       marginBottom: 8
     }
-  }, "SKU 層級的價格與庫存觀測。摘要按 Key / 符號 / Main Cat 計算，觀測永在 SKU 層。"), /*#__PURE__*/React.createElement(PriceStockSummary, {
-    onPick: setStockDrill
+  }, "SKU 層級的庫存觀測（有貨/少貨/缺貨/離線）與顯示狀態（根據 Tableau is_invisible 的可見/隱藏）。按下按鈕查看產品明細。"), /*#__PURE__*/React.createElement(SkuOverviewCards, {
+    data: data,
+    onStock: setStockDrill,
+    onVis: setVisDrill
   })), stockDrill && /*#__PURE__*/React.createElement(TreeDrillPanel, {
     sel: {
       fam: 'stock',
@@ -495,43 +497,81 @@ function Overview() {
       OFFLINE: '離線'
     }[stockDrill] || stockDrill,
     onClose: () => setStockDrill(null)
-  }), /*#__PURE__*/React.createElement("div", {
-    className: "panel"
-  }, /*#__PURE__*/React.createElement("h3", null, "可見 / 隱藏 總覽"), /*#__PURE__*/React.createElement("div", {
-    className: "small muted",
-    style: {
-      marginBottom: 8
-    }
-  }, "根據 Tableau is_invisible。按下可見 / 隱藏 查看產品明細。"), /*#__PURE__*/React.createElement("div", {
-    className: "cards"
-  }, /*#__PURE__*/React.createElement("button", {
-    className: "card card-btn",
-    onClick: () => setVisDrill(visDrill === 'visible' ? null : 'visible')
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "num",
-    style: {
-      color: 'var(--green,#16a34a)'
-    }
-  }, data.online_count ?? 0), /*#__PURE__*/React.createElement("div", {
-    className: "lbl"
-  }, "可見（線上）→")), /*#__PURE__*/React.createElement("button", {
-    className: "card card-btn",
-    onClick: () => setVisDrill(visDrill === 'invisible' ? null : 'invisible')
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "num",
-    style: {
-      color: 'var(--muted,#6b7280)'
-    }
-  }, data.offline_count ?? 0), /*#__PURE__*/React.createElement("div", {
-    className: "lbl"
-  }, "隱藏（離線）→")))), visDrill && /*#__PURE__*/React.createElement(TreeDrillPanel, {
+  }), visDrill && /*#__PURE__*/React.createElement(TreeDrillPanel, {
     sel: {
       fam: 'vis',
       state: visDrill
     },
     key: 'vis' + visDrill,
-    title: visDrill === 'invisible' ? '隱藏（離線）' : '可見（線上）',
+    title: visDrill === 'invisible' ? '隱藏' : '可見',
     onClose: () => setVisDrill(null)
+  }));
+}
+
+// Combined sku 總覽 cards: stock statuses (有貨/少貨/缺貨/離線) + visibility (可見/隱藏).
+function SkuOverviewCards({
+  data,
+  onStock,
+  onVis
+}) {
+  const {
+    data: ps,
+    err,
+    loading
+  } = useData('/api/price-stock/overview');
+  if (loading) return /*#__PURE__*/React.createElement(Loading, null);
+  if (err) return /*#__PURE__*/React.createElement(Err, {
+    m: err
+  });
+  if (!ps) return null;
+  const Btn = ({
+    onClick,
+    color,
+    val,
+    lbl
+  }) => /*#__PURE__*/React.createElement("button", {
+    className: "card card-btn",
+    onClick: onClick
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "num",
+    style: {
+      color
+    }
+  }, val), /*#__PURE__*/React.createElement("div", {
+    className: "lbl"
+  }, lbl, " →"));
+  return /*#__PURE__*/React.createElement("div", {
+    className: "cards"
+  }, /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => onStock('IN_STOCK'),
+    color: "var(--green)",
+    val: ps.in_stock,
+    lbl: "有貨"
+  }), /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => onStock('OUT_OF_STOCK'),
+    color: "var(--red)",
+    val: ps.out_of_stock,
+    lbl: "缺貨"
+  }), /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => onStock('LOW_STOCK'),
+    color: "var(--amber)",
+    val: ps.low_stock,
+    lbl: "少貨"
+  }), /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => onStock('OFFLINE'),
+    color: "var(--muted,#6b7280)",
+    val: ps.unknown_stock,
+    lbl: "離線"
+  }), /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => onVis('visible'),
+    color: "var(--green,#16a34a)",
+    val: data.online_count ?? 0,
+    lbl: "可見"
+  }), /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => onVis('invisible'),
+    color: "var(--muted,#6b7280)",
+    val: data.offline_count ?? 0,
+    lbl: "隱藏"
   }));
 }
 
@@ -1258,69 +1298,6 @@ function Review() {
 
 // ---------- Price & Stock ----------
 // Shared summary cards (also embedded in 總覽). LOW_STOCK removed; UNKNOWN renamed to 離線.
-function PriceStockSummary({
-  onPick
-}) {
-  const {
-    data,
-    err,
-    loading
-  } = useData('/api/price-stock/overview');
-  if (loading) return /*#__PURE__*/React.createElement(Loading, null);
-  if (err) return /*#__PURE__*/React.createElement(Err, {
-    m: err
-  });
-  if (!data) return null;
-  const Card = ({
-    status,
-    color,
-    val,
-    lbl
-  }) => onPick ? /*#__PURE__*/React.createElement("button", {
-    className: "card card-btn",
-    onClick: () => onPick(status)
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "num",
-    style: {
-      color
-    }
-  }, val), /*#__PURE__*/React.createElement("div", {
-    className: "lbl"
-  }, lbl, " →")) : /*#__PURE__*/React.createElement("div", {
-    className: "card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "num",
-    style: {
-      color
-    }
-  }, val), /*#__PURE__*/React.createElement("div", {
-    className: "lbl"
-  }, lbl));
-  return /*#__PURE__*/React.createElement("div", {
-    className: "cards"
-  }, /*#__PURE__*/React.createElement(Card, {
-    status: "IN_STOCK",
-    color: "var(--green)",
-    val: data.in_stock,
-    lbl: "有貨"
-  }), /*#__PURE__*/React.createElement(Card, {
-    status: "OUT_OF_STOCK",
-    color: "var(--red)",
-    val: data.out_of_stock,
-    lbl: "缺貨"
-  }), /*#__PURE__*/React.createElement(Card, {
-    status: "LOW_STOCK",
-    color: "var(--amber)",
-    val: data.low_stock,
-    lbl: "少貨"
-  }), /*#__PURE__*/React.createElement(Card, {
-    status: "OFFLINE",
-    color: "var(--muted,#6b7280)",
-    val: data.unknown_stock,
-    lbl: "離線"
-  }));
-}
-
 // ---------- Import / Export ----------
 function ImportExport() {
   const [csv, setCsv] = useState('');
@@ -1564,6 +1541,7 @@ function Categories() {
 // Direct all-SKU browser for 分類瀏覽: server-side pagination + the same filters
 // you'd see after pressing into a product token (keyword / SKU id / brand /
 // visibility / stock / review / 缺價 / 缺庫存).
+// Adds a Main Cat → Sub Cat → 產品符號 cascading drill; each level has an "all" option.
 function AllSkusView() {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(30);
@@ -1577,10 +1555,28 @@ function AllSkusView() {
     keyword: '',
     sku_id: ''
   });
+  // drill state
+  const [mainCat, setMainCat] = useState(''); // '' = all Main Cats
+  const [subCat, setSubCat] = useState(''); // '' = all sub-cats in chosen main (only meaningful when mainCat set)
+  const [tokenId, setTokenId] = useState(''); // '' = all tokens in chosen sub-cat
+  const {
+    data: mains
+  } = useData('/api/main-categories');
+  const {
+    data: subsData
+  } = useData(mainCat ? '/api/main-categories/' + mainCat + '/sub-categories' : null, [mainCat]);
+  const {
+    data: toksData
+  } = useData(subCat ? '/api/sub-categories/' + subCat + '/tokens' : null, [subCat]);
+
+  // SKU list URL: token > sub-cat > main > all
+  let skuUrl;
+  if (tokenId) skuUrl = '/api/sub-categories/' + subCat + '/skus?';else if (subCat) skuUrl = '/api/sub-categories/' + subCat + '/skus?';else if (mainCat) skuUrl = '/api/main-categories/' + mainCat + '/skus?';else skuUrl = '/api/skus/all?';
   const qs = new URLSearchParams({
     page: String(page),
     page_size: String(pageSize)
   });
+  if (tokenId) qs.set('token_id', String(tokenId));
   Object.entries(f).forEach(([k, v]) => {
     if (v) qs.set(k, v);
   });
@@ -1588,7 +1584,7 @@ function AllSkusView() {
     data,
     err,
     loading
-  } = useData('/api/skus/all?' + qs.toString(), [page, JSON.stringify(f)]);
+  } = useData(skuUrl + qs.toString(), [mainCat, subCat, tokenId, page, JSON.stringify(f)]);
   const {
     data: brands
   } = useData('/api/skus/all/brands');
@@ -1612,16 +1608,65 @@ function AllSkusView() {
       sku_id: ''
     });
   };
+  const pickMain = v => {
+    setPage(1);
+    setMainCat(v);
+    setSubCat('');
+    setTokenId('');
+  };
+  const pickSub = v => {
+    setPage(1);
+    setSubCat(v);
+    setTokenId('');
+  };
+  const pickTok = v => {
+    setPage(1);
+    setTokenId(v);
+  };
   const pg = data && data.pagination;
   const hasFilter = Object.values(f).some(v => v);
+  const subCats = subsData && subsData.sub_cats || [];
+  const tokens = toksData && toksData.tokens || [];
   return /*#__PURE__*/React.createElement(Page, {
     title: "分類瀏覽",
-    sub: "直接瀏覽全部 SKU。可用關鍵字 / SKU ID / 品牌 / 顯示 / 庫存 / 覆核 篩選。"
+    sub: "直接瀏覽全部 SKU，或用 Main Cat → Sub Cat → 產品符號 收窄範圍。"
   }, /*#__PURE__*/React.createElement(Err, {
     m: err
   }), /*#__PURE__*/React.createElement("div", {
     className: "panel"
   }, /*#__PURE__*/React.createElement("div", {
+    className: "toolbar filters",
+    style: {
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("select", {
+    value: mainCat,
+    onChange: e => pickMain(e.target.value),
+    "aria-label": "Main Cat"
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "全部 Main Cat"), (mains || []).map(m => /*#__PURE__*/React.createElement("option", {
+    key: m.code,
+    value: m.code
+  }, m.name, " (", m.sku_count, ")"))), mainCat && /*#__PURE__*/React.createElement("select", {
+    value: subCat,
+    onChange: e => pickSub(e.target.value),
+    "aria-label": "Sub Cat"
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "全部 Sub Cat（", mainCat, "）"), subCats.map(s => /*#__PURE__*/React.createElement("option", {
+    key: s.code,
+    value: s.code
+  }, s.name, " (", s.sku_count, ")"))), subCat && /*#__PURE__*/React.createElement("select", {
+    value: tokenId,
+    onChange: e => pickTok(e.target.value),
+    "aria-label": "產品符號"
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "全部產品符號（", subCat, "）"), tokens.map(t => /*#__PURE__*/React.createElement("option", {
+    key: t.id,
+    value: t.id
+  }, t.name, " (", t.sku_count, ")")))), /*#__PURE__*/React.createElement("div", {
     className: "toolbar filters"
   }, /*#__PURE__*/React.createElement("input", {
     placeholder: "關鍵字（名稱/SKU/品牌/規格）",

@@ -362,72 +362,6 @@ function RankBadge({
     }
   }, real));
 }
-
-// 總覽 panel: how many Product Keys' "cheapest" (rank-1) SKU is ALSO the real top-1 (in stock).
-// Cards are pressable — they drill into the representative SKU per key.
-function CheapestRealPanel() {
-  const {
-    data,
-    err,
-    loading
-  } = useData('/api/cheapest-real-overview');
-  const [drill, setDrill] = useState(null); // 'is-real' | 'not-real' | 'substituted' | null
-  if (loading) return /*#__PURE__*/React.createElement(Loading, null);
-  if (err) return /*#__PURE__*/React.createElement(Err, {
-    m: err
-  });
-  if (!data) return null;
-  const pct = data.cheapest_total ? Math.round(data.cheapest_is_real / data.cheapest_total * 100) : 0;
-  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    className: "cards"
-  }, /*#__PURE__*/React.createElement("button", {
-    className: "card card-btn",
-    onClick: () => setDrill(drill === 'is-real' ? null : 'is-real')
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "num",
-    style: {
-      color: 'var(--green,#16a34a)'
-    }
-  }, data.cheapest_is_real), /*#__PURE__*/React.createElement("div", {
-    className: "lbl"
-  }, "最平＝有貨Top1（最平有貨）→")), /*#__PURE__*/React.createElement("button", {
-    className: "card card-btn",
-    onClick: () => setDrill(drill === 'not-real' ? null : 'not-real')
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "num",
-    style: {
-      color: 'var(--amber,#d97706)'
-    }
-  }, data.cheapest_not_real), /*#__PURE__*/React.createElement("div", {
-    className: "lbl"
-  }, "最平缺貨（非有貨Top1）→")), /*#__PURE__*/React.createElement("button", {
-    className: "card card-btn",
-    onClick: () => setDrill(drill === 'substituted' ? null : 'substituted')
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "num"
-  }, data.real_substituted), /*#__PURE__*/React.createElement("div", {
-    className: "lbl"
-  }, "有貨Top1係次平/更後 →")), /*#__PURE__*/React.createElement("div", {
-    className: "card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "num"
-  }, pct, "%"), /*#__PURE__*/React.createElement("div", {
-    className: "lbl"
-  }, "最平有貨比例（共 ", data.cheapest_total, " Keys）"))), drill && /*#__PURE__*/React.createElement(TreeDrillPanel, {
-    sel: {
-      fam: 'cheap',
-      bucket: drill
-    },
-    key: 'cheap' + drill,
-    title: CR_DRILL_TITLE[drill] || drill,
-    onClose: () => setDrill(null)
-  }));
-}
-const CR_DRILL_TITLE = {
-  'is-real': '最平＝有貨Top1（最平嗰個有貨）',
-  'not-real': '最平缺貨（非有貨Top1）',
-  'substituted': '有貨Top1係次平/更後'
-};
 function Overview() {
   const {
     data,
@@ -436,9 +370,7 @@ function Overview() {
   } = useData('/api/overview');
   const [stockDrill, setStockDrill] = useState(null); // 'IN_STOCK' | 'OUT_OF_STOCK' | 'LOW_STOCK' | 'OFFLINE' | null
   const [visDrill, setVisDrill] = useState(null); // 'visible' | 'invisible' | null
-  const [statDrill, setStatDrill] = useState(null); // top-card drill key | null
   if (loading) return /*#__PURE__*/React.createElement(Loading, null);
-  const cards = [['Main Cat', data.large_groups, 'large-groups']];
   const freshness = /*#__PURE__*/React.createElement(React.Fragment, null, "最後線上狀態更新：", fmtTime(data.last_visibility_refresh), /*#__PURE__*/React.createElement("br", null), "最後價格更新：", fmtTime(data.last_price_refresh), /*#__PURE__*/React.createElement("br", null), "最後庫存更新：", fmtTime(data.last_stock_refresh));
   return /*#__PURE__*/React.createElement(Page, {
     title: "總覽",
@@ -447,33 +379,13 @@ function Overview() {
   }, /*#__PURE__*/React.createElement(Err, {
     m: err
   }), /*#__PURE__*/React.createElement("div", {
-    className: "cards"
-  }, cards.map(([l, v, k]) => /*#__PURE__*/React.createElement("button", {
-    className: "card card-btn",
-    key: l,
-    onClick: () => setStatDrill(statDrill === k ? null : k)
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "num"
-  }, v ?? 0), /*#__PURE__*/React.createElement("div", {
-    className: "lbl"
-  }, l, " →"))), /*#__PURE__*/React.createElement("div", {
-    className: "card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "num"
-  }, data.skus ?? 0), /*#__PURE__*/React.createElement("div", {
-    className: "lbl"
-  }, "SKUs"))), statDrill && /*#__PURE__*/React.createElement(StatDrill, {
-    kind: statDrill,
-    key: statDrill,
-    onClose: () => setStatDrill(null)
-  }), /*#__PURE__*/React.createElement("div", {
     className: "panel"
-  }, /*#__PURE__*/React.createElement("h3", null, "最平 / 有貨 Top1 總覽"), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("h3", null, "Current Status"), /*#__PURE__*/React.createElement("div", {
     className: "small muted",
     style: {
       marginBottom: 8
     }
-  }, "每個 Product Key 的「最平」第 1 名，而家有幾多個同時係「有貨 Top1」（最平嗰個有貨）。最平缺貨時，有貨 Top1 會落到次平、第三平…"), /*#__PURE__*/React.createElement(CheapestRealPanel, null)), /*#__PURE__*/React.createElement("div", {
+  }, "每個 Sub Cat 取 GMV 最高嘅 100 個 Facing id 做有貨 Top1。T1 = 最平且有貨可見；T2 = 最平缺貨/離線，用呢個補上；T3 = 冇 T2 補，用該 Sub Cat 第 101 名 GMV 產品補上。"), /*#__PURE__*/React.createElement(CurrentStatusPanel, null)), /*#__PURE__*/React.createElement(ActionToProcessPanel, null), /*#__PURE__*/React.createElement("div", {
     className: "panel"
   }, /*#__PURE__*/React.createElement("h3", null, "sku 總覽"), /*#__PURE__*/React.createElement("div", {
     className: "small muted",
@@ -506,6 +418,189 @@ function Overview() {
     title: visDrill === 'invisible' ? '隱藏' : '可見',
     onClose: () => setVisDrill(null)
   }));
+}
+
+// Current Status: the persisted (applied) tier baseline counts vs the live proposed.
+function CurrentStatusPanel() {
+  const {
+    data,
+    err,
+    loading,
+    reload
+  } = useData('/api/tiers/status');
+  if (loading) return /*#__PURE__*/React.createElement(Loading, null);
+  if (err) return /*#__PURE__*/React.createElement(Err, {
+    m: err
+  });
+  if (!data) return null;
+  const shown = data.baselineEmpty ? data.proposed : data.current;
+  const isLive = data.baselineEmpty;
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "cards"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "num",
+    style: {
+      color: 'var(--green,#16a34a)'
+    }
+  }, shown[1] ?? 0), /*#__PURE__*/React.createElement("div", {
+    className: "lbl"
+  }, "T1 產品（最平有貨可見）")), /*#__PURE__*/React.createElement("div", {
+    className: "card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "num",
+    style: {
+      color: 'var(--amber,#d97706)'
+    }
+  }, shown[2] ?? 0), /*#__PURE__*/React.createElement("div", {
+    className: "lbl"
+  }, "T2 產品（替代最平）")), /*#__PURE__*/React.createElement("div", {
+    className: "card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "num",
+    style: {
+      color: 'var(--blue,#1F4E78)'
+    }
+  }, shown[3] ?? 0), /*#__PURE__*/React.createElement("div", {
+    className: "lbl"
+  }, "T3 產品（101名 GMV 補上）"))), /*#__PURE__*/React.createElement("div", {
+    className: "small muted",
+    style: {
+      marginTop: 6
+    }
+  }, isLive ? '顯示緊 live 計算結果（仲未有任何已套用嘅 Current Status — 撳下面 Done 先會套用）。' : `已套用 Current Status（最後套用：${fmtTime(data.applied_at)}）。`));
+}
+
+// Action to be Processed: diff(proposed live, applied baseline) as a T1/T2/T3 x add/remove/outcome table.
+// Done applies the proposal as the new baseline (double-confirmed). Output is a stub for now.
+function ActionToProcessPanel() {
+  const {
+    data,
+    err,
+    loading,
+    reload
+  } = useData('/api/tiers/pending');
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  if (loading) return /*#__PURE__*/React.createElement("div", {
+    className: "panel"
+  }, /*#__PURE__*/React.createElement("h3", null, "Action to be Processed"), /*#__PURE__*/React.createElement(Loading, null));
+  if (err) return /*#__PURE__*/React.createElement("div", {
+    className: "panel"
+  }, /*#__PURE__*/React.createElement("h3", null, "Action to be Processed"), /*#__PURE__*/React.createElement(Err, {
+    m: err
+  }));
+  if (!data) return null;
+  const cnt = (o, t) => o && o[t] ? o[t].length : 0;
+  const net = t => (data.outcome.to[t] || 0) - (data.outcome.from[t] || 0);
+  const doApply = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await api.post('/api/tiers/apply', {});
+      setMsg(`已套用：${r.applied} 個 facing id（${fmtTime(r.applied_at)}）`);
+      setConfirming(false);
+      reload();
+    } catch (e) {
+      setMsg('套用失敗：' + e.message);
+    }
+    setBusy(false);
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    className: "panel"
+  }, /*#__PURE__*/React.createElement("h3", null, "Action to be Processed"), /*#__PURE__*/React.createElement("div", {
+    className: "small muted",
+    style: {
+      marginBottom: 8
+    }
+  }, "Status check 之後嘅變更會先喺度列出，撳 Done 先會套用到 Current Status。"), /*#__PURE__*/React.createElement("div", {
+    className: "table-wrap"
+  }, /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null), /*#__PURE__*/React.createElement("th", {
+    style: {
+      textAlign: 'right'
+    }
+  }, "T1"), /*#__PURE__*/React.createElement("th", {
+    style: {
+      textAlign: 'right'
+    }
+  }, "T2"), /*#__PURE__*/React.createElement("th", {
+    style: {
+      textAlign: 'right'
+    }
+  }, "T3"))), /*#__PURE__*/React.createElement("tbody", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("b", null, "add")), /*#__PURE__*/React.createElement("td", {
+    style: {
+      textAlign: 'right'
+    }
+  }, cnt(data.add, 1)), /*#__PURE__*/React.createElement("td", {
+    style: {
+      textAlign: 'right'
+    }
+  }, cnt(data.add, 2)), /*#__PURE__*/React.createElement("td", {
+    style: {
+      textAlign: 'right'
+    }
+  }, cnt(data.add, 3))), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("b", null, "remove")), /*#__PURE__*/React.createElement("td", {
+    style: {
+      textAlign: 'right'
+    }
+  }, cnt(data.remove, 1)), /*#__PURE__*/React.createElement("td", {
+    style: {
+      textAlign: 'right'
+    }
+  }, cnt(data.remove, 2)), /*#__PURE__*/React.createElement("td", {
+    style: {
+      textAlign: 'right'
+    }
+  }, cnt(data.remove, 3))), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("b", null, "outcome")), /*#__PURE__*/React.createElement("td", {
+    style: {
+      textAlign: 'right'
+    }
+  }, net(1) >= 0 ? '+' : '', net(1)), /*#__PURE__*/React.createElement("td", {
+    style: {
+      textAlign: 'right'
+    }
+  }, net(2) >= 0 ? '+' : '', net(2)), /*#__PURE__*/React.createElement("td", {
+    style: {
+      textAlign: 'right'
+    }
+  }, net(3) >= 0 ? '+' : '', net(3)))))), /*#__PURE__*/React.createElement("div", {
+    className: "toolbar",
+    style: {
+      marginTop: 10,
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "ghost",
+    onClick: () => alert('Output 功能稍後提供（你會話我知要 output 咩）。')
+  }, "Output"), !confirming ? /*#__PURE__*/React.createElement("button", {
+    onClick: () => setConfirming(true),
+    disabled: busy
+  }, "Done（套用變更到 Current Status）") : /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: 'inline-flex',
+      gap: 8,
+      alignItems: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "small",
+    style: {
+      color: 'var(--red,#C00000)'
+    }
+  }, "確定套用？呢個會改寫 Current Status。"), /*#__PURE__*/React.createElement("button", {
+    onClick: doApply,
+    disabled: busy
+  }, busy ? '套用中…' : '是，確認套用'), /*#__PURE__*/React.createElement("button", {
+    className: "ghost",
+    onClick: () => setConfirming(false),
+    disabled: busy
+  }, "取消"))), msg && /*#__PURE__*/React.createElement("div", {
+    className: "small",
+    style: {
+      marginTop: 8
+    }
+  }, msg));
 }
 
 // Combined sku 總覽 cards: stock statuses (有貨/少貨/缺貨/離線) + visibility (可見/隱藏).

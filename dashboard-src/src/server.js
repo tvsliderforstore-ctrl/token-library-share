@@ -10,6 +10,7 @@ const { Database } = require('./db/db');
 const config = require('./config');
 const repo = require('./db/repo');
 const { classify, classifyBatch } = require('./classify/classify');
+const tierEngine = require('./lib/tierEngine');
 const ingest = require('./ingest/ingest');
 const ie = require('./api/importExport');
 const { Router, sendJson, sendError, sendBuffer, readJson, readBody, parseQuery } = require('./api/httpUtil');
@@ -91,6 +92,42 @@ async function createApp(dbFile) {
     sendJson(res, 200, out);
   });
   r.get('/api/cheapest-real-overview', (req, res) => sendJson(res, 200, repo.cheapestRealOverview(db)));
+  // ---- Tier engine (Current Status / Action to be Processed) ----
+  r.get('/api/tiers/status', (req, res) => {
+    // Current Status = persisted baseline counts + proposed live counts
+    const proposed = tierEngine.computeProposed(db);
+    const d = tierEngine.diffTiers(db, proposed);
+    sendJson(res, 200, {
+      baselineEmpty: d.baselineEmpty,
+      current: d.baselineCount,   // persisted baseline (Current Status)
+      proposed: d.proposedCount,  // live computed proposal
+      applied_at: (db.get('SELECT MAX(applied_at) t FROM tier_status') || {}).t || null,
+    });
+  });
+  r.get('/api/tiers/pending', (req, res) => {
+    // Action to be Processed = diff(proposed, baseline), with SKU display info
+    const proposed = tierEngine.computeProposed(db);
+    const d = tierEngine.diffTiers(db, proposed);
+    // enrich with sku name + key display + subcat name
+    const enrich = (rows) => rows.map((r) => {
+      const k = db.get('SELECT display_key FROM product_keys WHERE id=?', [r.product_key_id]) || {};
+      const sc = db.get('SELECT name_zh FROM sub_categories WHERE id=?', [r.sub_category_id]) || {};
+      const sk = db.get('SELECT raw_sku_name FROM sku_records WHERE external_sku_id=?', [r.sku_id]) || {};
+      return { ...r, key_display: k.display_key || null, sub_cat: sc.name_zh || null, sku_name: sk.raw_sku_name || null };
+    });
+    sendJson(res, 200, {
+      baselineEmpty: d.baselineEmpty,
+      add: { 1: enrich(d.add[1]), 2: enrich(d.add[2]), 3: enrich(d.add[3]) },
+      remove: { 1: enrich(d.remove[1]), 2: enrich(d.remove[2]), 3: enrich(d.remove[3]) },
+      outcome: d.outcome,
+    });
+  });
+  r.post('/api/tiers/apply', (req, res) => {
+    // Done button: apply the live proposal as the new baseline (Current Status).
+    const proposed = tierEngine.computeProposed(db);
+    const out = tierEngine.applyTiers(db, proposed);
+    sendJson(res, 200, out);
+  });
   r.get('/api/cheapest-real-drill/:kind', (req, res, p, q) => {
     const out = repo.cheapestRealDrill(db, p.kind, { limit: q.limit, offset: q.offset });
     if (!out) return sendError(res, 404, 'Unknown cheapest-real drill kind: ' + p.kind);

@@ -1,0 +1,35 @@
+{
+  "name": "product-token-library",
+  "version": "1.0.0",
+  "description": "Product Token Library and Product Intelligence Dashboard (local-first)",
+  "main": "src/server.js",
+  "directories": {
+    "doc": "docs",
+    "test": "test"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js",
+    "migrate": "node src/db/migrate.js",
+    "seed": "node src/db/seed.js",
+    "test": "node --test test/",
+    "test:watch": "node --test --watch test/"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@babel/standalone": "^8.0.4",
+    "exceljs": "^4.4.0",
+    "opencc-js": "^1.4.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "sql.js": "^1.14.1"
+  },
+  "devDependencies": {
+    "@babel/cli": "^8.0.4",
+    "@babel/core": "^8.0.1",
+    "@babel/preset-react": "^8.0.1"
+  }
+}

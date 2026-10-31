@@ -1,0 +1,61 @@
+[
+  {
+    "input": "一口牛柳粒(急凍)#牛肉粒#淋滑#韓燒烤#家常小菜",
+    "expected": {
+      "large_group_name": "急凍/冷凍",
+      "product_token_name": "一口牛",
+      "matched_alias": "一口牛柳粒",
+      "product_key_display": null,
+      "requires_review": false,
+      "extracted_attributes": ["急凍", "牛肉粒", "淋滑", "韓燒烤", "家常小菜"]
+    }
+  },
+  {
+    "input": "一口牛柳粒（急凍）",
+    "expected": { "product_token_name": "一口牛", "requires_review": false }
+  },
+  {
+    "input": "一口牛柳粒 # 家常小菜",
+    "expected": { "product_token_name": "一口牛", "requires_review": false }
+  },
+  {
+    "input": "鈣思寶無糖豆奶250毫升24支",
+    "expected": {
+      "product_token_name": "豆奶",
+      "product_key_display": "鈣思寶 | 豆奶 | 中國 | 無糖 | 250ml x 24支",
+      "requires_review": false
+    }
+  },
+  {
+    "input": "北海道乳業北海道3.6牛乳1000ml四支裝",
+    "expected": {
+      "product_token_name": "牛奶",
+      "product_key_display": "北海道乳業 | 牛奶 | 日本 | 北海道3.6牛乳 | 1000ml x 4支",
+      "requires_review": false
+    }
+  },
+  {
+    "input": "柔軟加厚一次性潔面洗臉巾 80片",
+    "expected": { "product_token_name": "洗臉巾", "product_key_display": null }
+  },
+  {
+    "input": "抗菌濃縮洗衣液補充裝",
+    "expected": { "product_token_name": "洗衣液" }
+  },
+  {
+    "input": "三合一香味洗衣珠 30粒",
+    "expected": { "product_token_name": "洗衣珠" }
+  },
+  {
+    "input": "急凍一口牛柳粒",
+    "expected": { "product_token_name": "一口牛", "matched_alias": "急凍一口牛柳粒" }
+  },
+  {
+    "input": "某完全唔知咩產品XYZ999",
+    "expected": { "product_token_name": null, "match_method": "UNMATCHED", "requires_review": true }
+  },
+  {
+    "input": "一口牛柳妙粒",
+    "expected": { "requires_review": true, "note": "near-miss fuzzy must not auto-accept" }
+  }
+]

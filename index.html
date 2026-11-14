@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>產品符號庫 · Product Token Library</title>
+<style>
+  :root{--blue:#1F4E78;--red:#C00000;--bg:#f4f6fa;--card:#fff;--line:#e3e8f0;--txt:#1c2733;--muted:#6b7a8c}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif;background:var(--bg);color:var(--txt)}
+  #gate{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+  #gate .box{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:32px;width:100%;max-width:400px;box-shadow:0 4px 24px rgba(20,40,70,.08)}
+  #gate h1{font-size:18px;margin:0 0 6px;color:var(--blue)}
+  #gate p{font-size:13px;color:var(--muted);margin:0 0 18px;line-height:1.5}
+  #gate input{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:8px;font-size:15px;margin-bottom:12px}
+  #gate button{width:100%;padding:12px;background:var(--blue);color:#fff;border:0;border-radius:8px;font-size:15px;cursor:pointer}
+  #gate button:disabled{opacity:.6;cursor:wait}
+  #gatemsg{font-size:13px;color:var(--red);min-height:18px;margin-top:10px}
+  #progress{height:4px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:14px;display:none}
+  #progress>div{height:100%;background:var(--blue);width:0%;transition:width .15s}
+  #loadinfo{font-size:12px;color:var(--muted);margin-top:8px;display:none}
+  #frame{display:none;width:100vw;height:100vh;border:0}
+</style>
+</head>
+<body>
+<div id="gate">
+  <div class="box">
+    <h1>🔒 產品符號庫</h1>
+    <p>This dashboard is password-protected. The full app &amp; data are decrypted locally in your browser.<br/>此頁面受密碼保護，完整應用與資料會在你的瀏覽器內即時解密（不會上傳密碼）。</p>
+    <input id="pw" type="password" placeholder="Password / 密碼" autocomplete="current-password" />
+    <button id="unlock">Unlock / 解鎖</button>
+    <div id="progress"><div></div></div>
+    <div id="loadinfo"></div>
+    <div id="gatemsg"></div>
+  </div>
+</div>
+<iframe id="frame" title="dashboard"></iframe>
+
+<script>
+const $ = (s) => document.querySelector(s);
+
+async function deriveKey(password, salt) {
+  const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name:'PBKDF2', salt, iterations:100000, hash:'SHA-256' }, km, { name:'AES-GCM', length:256 }, false, ['decrypt']);
+}
+
+function setProgress(pct, info) {
+  $('#progress').style.display = 'block';
+  $('#progress > div').style.width = pct + '%';
+  const li = $('#loadinfo'); li.style.display = 'block'; li.textContent = info;
+}
+
+async function unlock() {
+  const pw = $('#pw').value;
+  $('#gatemsg').textContent = '';
+  if (!pw) { $('#gatemsg').textContent = '請輸入密碼'; return; }
+  $('#unlock').disabled = true;
+  try {
+    // 1. download the encrypted app with progress
+    setProgress(2, '下載加密資料… downloading…');
+    const res = await fetch('app.enc');
+    if (!res.ok) throw new Error('app.enc not found (' + res.status + ')');
+    const total = parseInt(res.headers.get('Content-Length') || '0', 10);
+    const reader = res.body.getReader();
+    const chunks = []; let received = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value); received += value.length;
+      if (total) setProgress(2 + Math.round(received / total * 68), `下載中 ${(received/1048576).toFixed(1)} / ${(total/1048576).toFixed(1)} MB`);
+    }
+    const buf = new Uint8Array(received); let off = 0;
+    for (const c of chunks) { buf.set(c, off); off += c.length; }
+
+    // 2. decrypt (wrong password throws here)
+    setProgress(74, '解密中… decrypting…');
+    const salt = buf.slice(0, 16), iv = buf.slice(16, 28), ct = buf.slice(28);
+    const key = await deriveKey(pw, salt);
+    const plainBuf = await crypto.subtle.decrypt({ name:'AES-GCM', iv }, key, ct);
+
+    // 2b. the payload is gzip-compressed before encryption (AES output is
+    //     incompressible, so packing it first cut the download from ~81MB to ~12MB).
+    //     Sniff the gzip magic so an older uncompressed app.enc still unlocks.
+    let appBuf = plainBuf;
+    const magic = new Uint8Array(plainBuf, 0, 2);
+    if (magic[0] === 0x1f && magic[1] === 0x8b) {
+      setProgress(88, '解壓中… unpacking…');
+      appBuf = await new Response(
+        new Blob([plainBuf]).stream().pipeThrough(new DecompressionStream('gzip'))
+      ).arrayBuffer();
+    }
+
+    // 3. load the decrypted HTML (the full app) into the iframe via blob URL.
+    //    Type text/html preserves the document exactly; the app's inline scripts run.
+    setProgress(92, '啟動應用… launching…');
+    const blob = new Blob([appBuf], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    $('#gate').style.display = 'none';
+    const fr = $('#frame'); fr.style.display = 'block';
+    fr.src = url;
+  } catch (e) {
+    console.error(e);
+    $('#gatemsg').textContent = '❌ 密碼錯誤或資料損毀 (wrong password)';
+    $('#progress').style.display = 'none'; $('#loadinfo').style.display = 'none';
+    $('#unlock').disabled = false;
+  }
+}
+$('#unlock').addEventListener('click', unlock);
+$('#pw').addEventListener('keydown', (e) => { if (e.key === 'Enter') unlock(); });
+</script>
+</body>
+</html>
